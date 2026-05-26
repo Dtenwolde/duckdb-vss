@@ -1,3 +1,4 @@
+#include "duckdb/common/vector/array_vector.hpp"
 #include "hnsw/hnsw_index_physical_create.hpp"
 
 #include "duckdb/catalog/catalog_entry/duck_index_entry.hpp"
@@ -61,7 +62,7 @@ public:
 unique_ptr<GlobalSinkState> PhysicalCreateHNSWIndex::GetGlobalSinkState(ClientContext &context) const {
 	auto gstate = make_uniq<CreateHNSWIndexGlobalState>(*this);
 
-	vector<LogicalType> data_types = {unbound_expressions[0]->return_type, LogicalType::ROW_TYPE};
+	vector<LogicalType> data_types = {unbound_expressions[0]->GetReturnType(), LogicalType::ROW_TYPE};
 	gstate->collection = make_uniq<ColumnDataCollection>(BufferManager::GetBufferManager(context), data_types);
 	gstate->context = context.shared_from_this();
 
@@ -89,7 +90,7 @@ public:
 unique_ptr<LocalSinkState> PhysicalCreateHNSWIndex::GetLocalSinkState(ExecutionContext &context) const {
 	auto state = make_uniq<CreateHNSWIndexLocalState>();
 
-	vector<LogicalType> data_types = {unbound_expressions[0]->return_type, LogicalType::ROW_TYPE};
+	vector<LogicalType> data_types = {unbound_expressions[0]->GetReturnType(), LogicalType::ROW_TYPE};
 	state->collection = make_uniq<ColumnDataCollection>(BufferManager::GetBufferManager(context.client), data_types);
 	state->collection->InitializeAppend(state->append_state);
 	return std::move(state);

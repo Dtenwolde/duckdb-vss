@@ -169,7 +169,7 @@ static void HNSWIndexInfoExecute(ClientContext &context, TableFunctionInput &dat
 
 		row++;
 	}
-	output.SetCardinality(row);
+	output.SetChildCardinality(row);
 }
 
 //-------------------------------------------------------------------------

@@ -83,7 +83,7 @@ PhysicalOperator &HNSWIndex::CreatePlan(PlanIndexInput &input) {
 	if (create_index.expressions.size() != 1) {
 		throw BinderException("HNSW indexes can only be created over a single column of keys.");
 	}
-	auto &arr_type = create_index.expressions[0]->return_type;
+	auto &arr_type = create_index.expressions[0]->GetReturnType();
 	if (arr_type.id() != LogicalTypeId::ARRAY) {
 		throw BinderException("HNSW index keys must be of type FLOAT[N]");
 	}
@@ -103,7 +103,7 @@ PhysicalOperator &HNSWIndex::CreatePlan(PlanIndexInput &input) {
 	vector<LogicalType> new_column_types;
 	vector<unique_ptr<Expression>> select_list;
 	for (auto &expression : create_index.expressions) {
-		new_column_types.push_back(expression->return_type);
+		new_column_types.push_back(expression->GetReturnType());
 		select_list.push_back(std::move(expression));
 	}
 	new_column_types.emplace_back(LogicalType::ROW_TYPE);

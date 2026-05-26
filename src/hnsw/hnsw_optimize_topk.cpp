@@ -31,19 +31,17 @@ static unique_ptr<Expression> CreateListOrderByExpr(ClientContext &context, uniq
 		return nullptr;
 	}
 
-	auto func = func_entry->functions.GetFunctionByOffset(0);
+	const auto &func = func_entry->functions.GetFunctionByOffset(0);
 	vector<unique_ptr<Expression>> arguments;
 	arguments.push_back(std::move(elem_expr));
 
-	auto agg_bind_data = func.bind(context, func, arguments);
-	auto new_agg_expr =
-	    make_uniq<BoundAggregateExpression>(func, std::move(arguments), std::move(std::move(filter_expr)),
-	                                        std::move(agg_bind_data), AggregateType::NON_DISTINCT);
+	auto new_agg_expr = func.Bind(context, std::move(arguments));
 
 	// We also need to order the list items by the distance
 	BoundOrderByNode order_by_node(OrderType::ASCENDING, OrderByNullType::NULLS_LAST, std::move(order_expr));
 	new_agg_expr->order_bys = make_uniq<BoundOrderModifier>();
 	new_agg_expr->order_bys->orders.push_back(std::move(order_by_node));
+	new_agg_expr->filter = std::move(filter_expr);
 
 	return std::move(new_agg_expr);
 }
@@ -76,21 +74,21 @@ public:
 		}
 
 		auto &agg_expr = agg.expressions[0];
-		if (agg_expr->type != ExpressionType::BOUND_AGGREGATE) {
+		if (agg_expr->GetExpressionType() != ExpressionType::BOUND_AGGREGATE) {
 			return false;
 		}
 		auto &agg_func_expr = agg_expr->Cast<BoundAggregateExpression>();
-		if (agg_func_expr.function.name != "min_by") {
+		if (agg_func_expr.function.GetName() != "min_by") {
 			return false;
 		}
 		if (agg_func_expr.children.size() != 3) {
 			return false;
 		}
-		if (agg_func_expr.children[2]->type != ExpressionType::VALUE_CONSTANT) {
+		if (agg_func_expr.children[2]->GetExpressionType() != ExpressionType::VALUE_CONSTANT) {
 			return false;
 		}
 		const auto &col_expr = agg_func_expr.children[0];
-		const auto &dist_expr = agg_func_expr.children[1];
+		auto &dist_expr = *agg_func_expr.children[1];
 		const auto &limit_expr = agg_func_expr.children[2];
 
 		// we need the aggregate to be on top of a projection
@@ -150,10 +148,11 @@ public:
 			auto &const_expr_ref = bindings[1];
 			auto &index_expr_ref = bindings[2];
 
-			if (const_expr_ref.get().type != ExpressionType::VALUE_CONSTANT || !index_expr->Equals(index_expr_ref)) {
+			if (const_expr_ref.get().GetExpressionType() != ExpressionType::VALUE_CONSTANT ||
+			    !index_expr->Equals(index_expr_ref)) {
 				// Swap the bindings and try again
 				std::swap(const_expr_ref, index_expr_ref);
-				if (const_expr_ref.get().type != ExpressionType::VALUE_CONSTANT ||
+				if (const_expr_ref.get().GetExpressionType() != ExpressionType::VALUE_CONSTANT ||
 				    !index_expr->Equals(index_expr_ref)) {
 					// Nope, not a match, we can't optimize.
 					return false;
@@ -189,10 +188,10 @@ public:
 		get.bind_data = std::move(bind_data);
 
 		// Replace the aggregate with a list() aggregate function ordered by the distance
-		agg.expressions[0] = CreateListOrderByExpr(context, col_expr->Copy(), dist_expr->Copy(),
+		agg.expressions[0] = CreateListOrderByExpr(context, col_expr->Copy(), dist_expr.Copy(),
 		                                           agg_func_expr.filter ? agg_func_expr.filter->Copy() : nullptr);
 
-		if (get.table_filters.filters.empty()) {
+		if (!get.table_filters.HasFilters()) {
 			return true;
 		}
 
@@ -202,22 +201,12 @@ public:
 
 		auto new_filter = make_uniq<LogicalFilter>();
 		auto &column_ids = get.GetColumnIds();
-		for (const auto &entry : get.table_filters.filters) {
-			idx_t column_id = entry.first;
-			auto &type = get.returned_types[column_id];
-			bool found = false;
-			for (idx_t i = 0; i < column_ids.size(); i++) {
-				if (column_ids[i].GetPrimaryIndex() == column_id) {
-					column_id = i;
-					found = true;
-					break;
-				}
-			}
-			if (!found) {
-				throw InternalException("Could not find column id for filter");
-			}
-			auto column = make_uniq<BoundColumnRefExpression>(type, ColumnBinding(get.table_index, column_id));
-			new_filter->expressions.push_back(entry.second->ToExpression(*column));
+		for (const auto &entry : get.table_filters) {
+			auto filter_idx = entry.GetIndex();
+			auto &column_id = get.GetColumnIndex(filter_idx);
+			auto &type = get.returned_types[column_id.GetPrimaryIndex()];
+			auto column = make_uniq<BoundColumnRefExpression>(type, ColumnBinding(get.table_index, filter_idx));
+			new_filter->expressions.push_back(entry.Filter().ToExpression(*column));
 		}
 
 		new_filter->children.push_back(std::move(get_ptr));

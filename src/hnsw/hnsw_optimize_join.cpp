@@ -1,3 +1,4 @@
+#include "duckdb/common/vector/array_vector.hpp"
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
 #include "duckdb/optimizer/column_binding_replacer.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
@@ -13,6 +14,7 @@
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_window.hpp"
 #include "duckdb/planner/expression_iterator.hpp"
+#include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/storage/storage_index.hpp"
 #include "duckdb/storage/table/data_table_info.hpp"
@@ -52,7 +54,7 @@ public:
 	idx_t limit;
 
 	vector<column_t> inner_column_ids;
-	vector<idx_t> inner_projection_ids;
+	vector<ProjectionIndex> inner_projection_ids;
 
 	idx_t outer_vector_column;
 	idx_t inner_vector_column;
@@ -124,10 +126,10 @@ OperatorResultType PhysicalHNSWIndexJoin::Execute(ExecutionContext &context, Dat
 	auto &rhs_vector_vector = input.data[outer_vector_column];
 	auto &rhs_vector_child = ArrayVector::GetEntry(rhs_vector_vector);
 	const auto rhs_vector_size = ArrayType::GetSize(rhs_vector_vector.GetType());
-	const auto rhs_vector_ptr = FlatVector::GetData<float>(rhs_vector_child);
+	const auto rhs_vector_ptr = FlatVector::GetDataMutable<float>(rhs_vector_child);
 
 	// We mimic the window row_number() operator here and output the row number in each batch, basically.
-	const auto row_number_vector = FlatVector::GetData<int64_t>(chunk.data[MATCH_COLUMN_OFFSET]);
+	const auto row_number_vector = FlatVector::GetDataMutable<int64_t>(chunk.data[MATCH_COLUMN_OFFSET]);
 
 	hnsw_index.ResetMultiScan(*state.index_state);
 
@@ -184,7 +186,7 @@ InsertionOrderPreservingMap<string> PhysicalHNSWIndexJoin::ParamsToString() cons
 
 class LogicalHNSWIndexJoin final : public LogicalExtensionOperator {
 public:
-	explicit LogicalHNSWIndexJoin(const idx_t table_index_p, DuckTableEntry &table_p, HNSWIndex &hnsw_index_p,
+	explicit LogicalHNSWIndexJoin(const TableIndex table_index_p, DuckTableEntry &table_p, HNSWIndex &hnsw_index_p,
 	                              const idx_t limit_p)
 	    : table_index(table_index_p), table(table_p), hnsw_index(hnsw_index_p), limit(limit_p) {
 	}
@@ -199,14 +201,14 @@ public:
 	idx_t EstimateCardinality(ClientContext &context) override;
 
 public:
-	idx_t table_index;
+	TableIndex table_index;
 
 	DuckTableEntry &table;
 	HNSWIndex &hnsw_index;
 	idx_t limit;
 
 	vector<column_t> inner_column_ids;
-	vector<idx_t> inner_projection_ids;
+	vector<ProjectionIndex> inner_projection_ids;
 	vector<LogicalType> inner_returned_types;
 
 	idx_t outer_vector_column;
@@ -254,7 +256,7 @@ vector<ColumnBinding> LogicalHNSWIndexJoin::GetLeftBindings() {
 	vector<ColumnBinding> result;
 	if (inner_projection_ids.empty()) {
 		for (idx_t col_idx = 0; col_idx < inner_column_ids.size(); col_idx++) {
-			result.emplace_back(table_index, col_idx);
+			result.emplace_back(table_index, ProjectionIndex(col_idx));
 		}
 	} else {
 		for (auto proj_id : inner_projection_ids) {
@@ -263,7 +265,7 @@ vector<ColumnBinding> LogicalHNSWIndexJoin::GetLeftBindings() {
 	}
 
 	// Always add the row number last
-	result.emplace_back(table_index, inner_column_ids.size());
+	result.emplace_back(table_index, ProjectionIndex(inner_column_ids.size()));
 
 	return result;
 }
@@ -443,15 +445,15 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 	if (filter.expressions.size() != 1) {
 		return false;
 	}
-	if (filter.expressions.back()->type != ExpressionType::COMPARE_LESSTHANOREQUALTO) {
+	if (filter.expressions.back()->GetExpressionType() != ExpressionType::COMPARE_LESSTHANOREQUALTO) {
 		return false;
 	}
-	const auto &compare_expr = filter.expressions.back()->Cast<BoundComparisonExpression>();
-	if (compare_expr.right->type != ExpressionType::VALUE_CONSTANT) {
+	const auto &compare_expr = filter.expressions.back()->Cast<BoundFunctionExpression>();
+	if (BoundComparisonExpression::Right(compare_expr).GetExpressionType() != ExpressionType::VALUE_CONSTANT) {
 		return false;
 	}
-	const auto &constant_expr = compare_expr.right->Cast<BoundConstantExpression>();
-	if (constant_expr.return_type != LogicalType::BIGINT) {
+	const auto &constant_expr = BoundComparisonExpression::Right(compare_expr).Cast<BoundConstantExpression>();
+	if (constant_expr.GetReturnType() != LogicalType::BIGINT) {
 		return false;
 	}
 	auto k_value = constant_expr.value.GetValue<int64_t>();
@@ -459,14 +461,14 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 		// Can only optimize up to SVS
 		return false;
 	}
-	if (compare_expr.left->type != ExpressionType::BOUND_COLUMN_REF) {
+	if (BoundComparisonExpression::Left(compare_expr).GetExpressionType() != ExpressionType::BOUND_COLUMN_REF) {
 		return false;
 	}
-	auto &filter_ref_expr = compare_expr.left->Cast<BoundColumnRefExpression>();
+	auto &filter_ref_expr = BoundComparisonExpression::Left(compare_expr).Cast<BoundColumnRefExpression>();
 	if (filter_ref_expr.binding.table_index != window.window_index) {
 		return false;
 	}
-	if (filter_ref_expr.binding.column_index != 0) {
+	if (filter_ref_expr.binding.column_index != ProjectionIndex(0)) {
 		return false;
 	}
 
@@ -474,7 +476,7 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 	if (window.expressions.size() != 1) {
 		return false;
 	}
-	if (window.expressions.back()->type != ExpressionType::WINDOW_ROW_NUMBER) {
+	if (window.expressions.back()->GetExpressionType() != ExpressionType::WINDOW_ROW_NUMBER) {
 		return false;
 	}
 	auto &window_expr = window.expressions.back()->Cast<BoundWindowExpression>();
@@ -484,7 +486,7 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 	if (window_expr.orders.back().type != OrderType::ASCENDING) {
 		return false;
 	}
-	if (window_expr.orders.back().expression->type != ExpressionType::BOUND_COLUMN_REF) {
+	if (window_expr.orders.back().expression->GetExpressionType() != ExpressionType::BOUND_COLUMN_REF) {
 		return false;
 	}
 	const auto &distance_ref_expr = window_expr.orders.back().expression->Cast<BoundColumnRefExpression>();
@@ -495,7 +497,7 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 	if (distance_ref_expr.binding.column_index >= inner_proj.expressions.size()) {
 		return false;
 	}
-	const auto &distance_expr_ptr = inner_proj.expressions[distance_ref_expr.binding.column_index];
+	auto &distance_expr_ptr = *inner_proj.expressions[distance_ref_expr.binding.column_index];
 
 	//------------------------------------------------------------------------------
 	// Match the index
@@ -530,7 +532,7 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 
 		// We also have to replace the outer table index here with the delim_get table index
 		ExpressionIterator::EnumerateExpression(bound_index_expr, [&](Expression &child) {
-			if (child.type == ExpressionType::BOUND_COLUMN_REF) {
+			if (child.GetExpressionType() == ExpressionType::BOUND_COLUMN_REF) {
 				auto &bound_colref_expr = child.Cast<BoundColumnRefExpression>();
 				if (bound_colref_expr.binding.table_index == outer_get.table_index) {
 					bound_colref_expr.binding.table_index = delim_get.table_index;
@@ -560,10 +562,10 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 	}
 
 	// Fuck it, for now dont allow expressions on the index
-	if (bindings[1].get().type != ExpressionType::BOUND_COLUMN_REF) {
+	if (bindings[1].get().GetExpressionType() != ExpressionType::BOUND_COLUMN_REF) {
 		return false;
 	}
-	if (bindings[2].get().type != ExpressionType::BOUND_COLUMN_REF) {
+	if (bindings[2].get().GetExpressionType() != ExpressionType::BOUND_COLUMN_REF) {
 		return false;
 	}
 	const auto &outer_ref_expr = bindings[1].get().Cast<BoundColumnRefExpression>();
@@ -599,7 +601,7 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 	auto delim_bindings = delim_join.GetColumnBindings();
 	auto delim_types = delim_join.types;
 
-	idx_t new_binding_idx = 0;
+	ProjectionIndex new_binding_idx(0);
 	for (idx_t i = 0; i < delim_bindings.size(); i++) {
 		auto &old_binding = delim_bindings[i];
 
@@ -617,7 +619,7 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 
 	// Also add the window expression to the projection last. We will replace this with a reference to the index join
 	// in the next inlining step
-	ColumnBinding window_binding(window.window_index, 0);
+	ColumnBinding window_binding(window.window_index, ProjectionIndex(0));
 	projection_expressions.push_back(make_uniq<BoundColumnRefExpression>(LogicalType::BIGINT, window_binding));
 	replacer.replacement_bindings.emplace_back(window_binding,
 	                                           ColumnBinding(projection_table_index, new_binding_idx++));
@@ -642,8 +644,8 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 			auto &outer_proj = outer_proj_ptr->get()->Cast<LogicalProjection>();
 			if (ref.binding.table_index == outer_proj.table_index) {
 				// assert that this can only be bound column ref
-				const auto &outer_expr = outer_proj.expressions[ref.binding.column_index];
-				const auto &outer_ref = outer_expr->Cast<BoundColumnRefExpression>();
+				const auto &outer_expr = outer_proj.GetExpression(ref.binding);
+				const auto &outer_ref = outer_expr.Cast<BoundColumnRefExpression>();
 
 				ref.binding = outer_ref.binding;
 			}
@@ -651,15 +653,15 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 
 		// If this references the inner proj, replace it with the actual expression
 		if (ref.binding.table_index == inner_proj.table_index) {
-			const auto &inner_expr = inner_proj.expressions[ref.binding.column_index];
-			expr = inner_expr->Copy();
+			const auto &inner_expr = inner_proj.GetExpression(ref.binding);
+			expr = inner_expr.Copy();
 			// These can still reference the delim_get, but we replace them in the next step.
 		}
 
 		// Special case: the window row number expression. Forward this to the index join
 		else if (ref.binding.table_index == window.window_index) {
 			// The special "row_number" expression is always the last column of the index_join itself
-			ColumnBinding index_row_number_binding(index_join->table_index, index_join->inner_column_ids.size());
+			ColumnBinding index_row_number_binding(index_join->table_index, ProjectionIndex(index_join->inner_column_ids.size()));
 			expr = make_uniq<BoundColumnRefExpression>(LogicalType::BIGINT, index_row_number_binding);
 		}
 	}
