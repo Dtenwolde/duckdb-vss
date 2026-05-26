@@ -1,3 +1,4 @@
+#include "duckdb/common/vector/array_vector.hpp"
 #include "hnsw/hnsw_index.hpp"
 
 #include "duckdb/common/allocator.hpp"
@@ -344,7 +345,7 @@ idx_t HNSWIndex::Scan(IndexScanState &state, Vector &result, idx_t result_offset
 	auto &scan_state = state.Cast<HNSWIndexScanState>();
 
 	idx_t count = 0;
-	auto row_ids = FlatVector::GetData<row_t>(result) + result_offset;
+	auto row_ids = FlatVector::GetDataMutable<row_t>(result) + result_offset;
 
 	// Push the row ids into the result vector, up to STANDARD_VECTOR_SIZE or the
 	// end of the result set
@@ -398,7 +399,7 @@ idx_t HNSWIndex::ExecuteMultiScan(IndexScanState &state_p, float *query_vector, 
 
 const Vector &HNSWIndex::GetMultiScanResult(IndexScanState &state) {
 	auto &scan_state = state.Cast<MultiScanState>();
-	FlatVector::SetData(scan_state.vec, (data_ptr_t)scan_state.row_ids.data());
+	FlatVector::SetData(scan_state.vec, (data_ptr_t)scan_state.row_ids.data(), count_t(scan_state.row_ids.size()));
 	return scan_state.vec;
 }
 
@@ -407,7 +408,7 @@ void HNSWIndex::ResetMultiScan(IndexScanState &state) {
 	scan_state.row_ids.clear();
 }
 
-void HNSWIndex::CommitDrop(IndexLock &index_lock) {
+void HNSWIndex::ResetStorage(IndexLock &index_lock) {
 	// Acquire an exclusive lock to drop the index
 	auto lock = rwlock.GetExclusiveLock();
 
@@ -429,7 +430,7 @@ void HNSWIndex::Construct(DataChunk &input, Vector &row_ids, idx_t thread_idx) {
 	input.Flatten();
 
 	auto &vec_vec = input.data[0];
-	auto &vec_child_vec = ArrayVector::GetEntry(vec_vec);
+	auto &vec_child_vec = ArrayVector::GetChild(vec_vec);
 	auto array_size = ArrayType::GetSize(vec_vec.GetType());
 
 	auto vec_child_data = FlatVector::GetData<float>(vec_child_vec);
@@ -498,7 +499,7 @@ void HNSWIndex::Delete(IndexLock &lock, DataChunk &input, Vector &rowid_vec) {
 	is_dirty = true;
 
 	auto count = input.size();
-	rowid_vec.Flatten(count);
+	rowid_vec.Flatten();
 	auto row_id_data = FlatVector::GetData<row_t>(rowid_vec);
 
 	// For deleting from the index, we need an exclusive lock
@@ -596,8 +597,12 @@ bool HNSWIndex::MergeIndexes(IndexLock &state, BoundIndex &other_index) {
 void HNSWIndex::Vacuum(IndexLock &state) {
 }
 
-string HNSWIndex::VerifyAndToString(IndexLock &state, const bool only_verify) {
-	throw NotImplementedException("HNSWIndex::VerifyAndToString() not implemented");
+void HNSWIndex::Verify(IndexLock &state) {
+	throw NotImplementedException("HNSWIndex::Verify() not implemented");
+}
+
+string HNSWIndex::ToString(IndexLock &state, bool display_ascii) {
+	throw NotImplementedException("HNSWIndex::ToString() not implemented");
 }
 
 void HNSWIndex::VerifyAllocations(IndexLock &state) {
@@ -607,10 +612,10 @@ void HNSWIndex::VerifyAllocations(IndexLock &state) {
 //------------------------------------------------------------------------------
 // Can rewrite index expression?
 //------------------------------------------------------------------------------
-static void TryBindIndexExpressionInternal(Expression &expr, idx_t table_idx, const vector<column_t> &index_columns,
+static void TryBindIndexExpressionInternal(Expression &expr, TableIndex table_idx, const vector<column_t> &index_columns,
                                            const vector<ColumnIndex> &table_columns, bool &success, bool &found) {
 
-	if (expr.type == ExpressionType::BOUND_COLUMN_REF) {
+	if (expr.GetExpressionType() == ExpressionType::BOUND_COLUMN_REF) {
 		found = true;
 		auto &ref = expr.Cast<BoundColumnRefExpression>();
 
@@ -620,7 +625,7 @@ static void TryBindIndexExpressionInternal(Expression &expr, idx_t table_idx, co
 		const auto referenced_column = index_columns[ref.binding.column_index];
 		for (idx_t i = 0; i < table_columns.size(); i++) {
 			if (table_columns[i].GetPrimaryIndex() == referenced_column) {
-				ref.binding.column_index = i;
+				ref.binding.column_index = ProjectionIndex(i);
 				return;
 			}
 		}
@@ -651,9 +656,9 @@ bool HNSWIndex::TryBindIndexExpression(LogicalGet &get, unique_ptr<Expression> &
 	return false;
 }
 
-bool HNSWIndex::TryMatchDistanceFunction(const unique_ptr<Expression> &expr,
+bool HNSWIndex::TryMatchDistanceFunction(Expression &expr,
                                          vector<reference<Expression>> &bindings) const {
-	return function_matcher->Match(*expr, bindings);
+	return function_matcher->Match(expr, bindings);
 }
 
 unique_ptr<ExpressionMatcher> HNSWIndex::MakeFunctionMatcher() const {

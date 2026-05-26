@@ -2,6 +2,7 @@
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
+#include "duckdb/optimizer/optimizer_extension.hpp"
 
 #include "hnsw/hnsw.hpp"
 
@@ -49,8 +50,8 @@ unique_ptr<Expression> CosineDistanceRule::Apply(LogicalOperator &op, vector<ref
 		// Create the new array_cosine_distance function
 		vector<unique_ptr<Expression>> args;
 		vector<LogicalType> arg_types;
-		arg_types.push_back(similarity_expr.children[0]->return_type);
-		arg_types.push_back(similarity_expr.children[1]->return_type);
+		arg_types.push_back(similarity_expr.children[0]->GetReturnType());
+		arg_types.push_back(similarity_expr.children[1]->GetReturnType());
 		args.push_back(std::move(similarity_expr.children[0]));
 		args.push_back(std::move(similarity_expr.children[1]));
 
@@ -63,8 +64,8 @@ unique_ptr<Expression> CosineDistanceRule::Apply(LogicalOperator &op, vector<ref
 		}
 
 		changes_made = true;
-		auto func = func_entry->functions.GetFunctionByArguments(context, arg_types);
-		return make_uniq<BoundFunctionExpression>(similarity_expr.return_type, func, std::move(args), nullptr);
+		const auto &func = func_entry->functions.GetFunctionByArguments(context, arg_types);
+		return func.Bind(context, std::move(args));
 	}
 	return nullptr;
 }
@@ -86,8 +87,7 @@ public:
 };
 
 void HNSWModule::RegisterExprOptimizer(DatabaseInstance &db) {
-	// Register the TopKOptimizer
-	db.config.optimizer_extensions.push_back(HNSWExprOptimizer());
+	OptimizerExtension::Register(db.config, HNSWExprOptimizer());
 }
 
 } // namespace duckdb

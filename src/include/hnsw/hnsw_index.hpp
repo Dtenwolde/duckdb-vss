@@ -71,7 +71,7 @@ public:
 	static const case_insensitive_map_t<unum::usearch::metric_kind_t> METRIC_KIND_MAP;
 	static const unordered_map<uint8_t, unum::usearch::scalar_kind_t> SCALAR_KIND_MAP;
 
-	bool TryMatchDistanceFunction(const unique_ptr<Expression> &expr, vector<reference<Expression>> &bindings) const;
+	bool TryMatchDistanceFunction(Expression &expr, vector<reference<Expression>> &bindings) const;
 	bool TryBindIndexExpression(LogicalGet &get, unique_ptr<Expression> &result) const;
 
 public:
@@ -79,7 +79,7 @@ public:
 	ErrorData Append(IndexLock &lock, DataChunk &entries, Vector &row_identifiers) override;
 
 	//! Deletes all data from the index. The lock obtained from InitializeLock must be held
-	void CommitDrop(IndexLock &index_lock) override;
+	void ResetStorage(IndexLock &index_lock) override;
 	//! Delete a chunk of entries from the index. The lock obtained from InitializeLock must be held
 	void Delete(IndexLock &lock, DataChunk &entries, Vector &row_identifiers) override;
 	//! Insert a chunk of entries into the index
@@ -99,8 +99,10 @@ public:
 	//! Traverses an HNSWIndex and vacuums the qualifying nodes. The lock obtained from InitializeLock must be held
 	void Vacuum(IndexLock &state) override;
 
-	//! Returns the string representation of the HNSWIndex, or only traverses and verifies the index.
-	string VerifyAndToString(IndexLock &state, const bool only_verify) override;
+	//! Traverses and verifies the index.
+	void Verify(IndexLock &state) override;
+	//! Returns the string representation of the index.
+	string ToString(IndexLock &state, bool display_ascii = false) override;
 	//! Ensures that the node allocation counts match the node counts.
 	void VerifyAllocations(IndexLock &state) override;
 

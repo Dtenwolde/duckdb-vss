@@ -49,7 +49,7 @@ public:
 			return false;
 		}
 
-		if (order.expression->type != ExpressionType::BOUND_COLUMN_REF) {
+		if (order.expression->GetExpressionType() != ExpressionType::BOUND_COLUMN_REF) {
 			// The expression has to reference the child operator (a projection with the distance function)
 			return false;
 		}
@@ -64,8 +64,7 @@ public:
 		auto &projection = top_n.children.front()->Cast<LogicalProjection>();
 
 		// This the expression that is referenced by the order by expression
-		const auto projection_index = bound_column_ref.binding.column_index;
-		const auto &projection_expr = projection.expressions[projection_index];
+		auto &projection_expr = *projection.expressions[bound_column_ref.binding.column_index];
 
 		// The projection must sit on top of a get
 		if (projection.children.size() != 1 || projection.children.front()->type != LogicalOperatorType::LOGICAL_GET) {
@@ -102,9 +101,9 @@ public:
 		vector<reference<Expression>> bindings;
 
 		table_info.BindIndexes(context, HNSWIndex::TYPE_NAME);
-		table_info.GetIndexes().Scan([&](Index &index) {
+		for (auto &index : table_info.GetIndexes().Indexes()) {
 			if (!index.IsBound() || HNSWIndex::TYPE_NAME != index.GetIndexType()) {
-				return false;
+				continue;
 			}
 			auto &cast_index = index.Cast<HNSWIndex>();
 
@@ -113,25 +112,26 @@ public:
 
 			// Check that the projection expression is a distance function that matches the index
 			if (!cast_index.TryMatchDistanceFunction(projection_expr, bindings)) {
-				return false;
+				continue;
 			}
 			// Check that the HNSW index actually indexes the expression
 			unique_ptr<Expression> index_expr;
 			if (!cast_index.TryBindIndexExpression(get, index_expr)) {
-				return false;
+				continue;
 			}
 
 			// Now, ensure that one of the bindings is a constant vector, and the other our index expression
 			auto &const_expr_ref = bindings[1];
 			auto &index_expr_ref = bindings[2];
 
-			if (const_expr_ref.get().type != ExpressionType::VALUE_CONSTANT || !index_expr->Equals(index_expr_ref)) {
+			if (const_expr_ref.get().GetExpressionType() != ExpressionType::VALUE_CONSTANT ||
+			    !index_expr->Equals(index_expr_ref)) {
 				// Swap the bindings and try again
 				std::swap(const_expr_ref, index_expr_ref);
-				if (const_expr_ref.get().type != ExpressionType::VALUE_CONSTANT ||
+				if (const_expr_ref.get().GetExpressionType() != ExpressionType::VALUE_CONSTANT ||
 				    !index_expr->Equals(index_expr_ref)) {
 					// Nope, not a match, we can't optimize.
-					return false;
+					continue;
 				}
 			}
 
@@ -144,8 +144,8 @@ public:
 			}
 
 			bind_data = make_uniq<HNSWIndexScanBindData>(duck_table, cast_index, top_n.limit, std::move(query_vector));
-			return true;
-		});
+			break;
+		}
 
 		if (!bind_data) {
 			// No index found
@@ -158,7 +158,7 @@ public:
 		get.has_estimated_cardinality = cardinality->has_estimated_cardinality;
 		get.estimated_cardinality = cardinality->estimated_cardinality;
 		get.bind_data = std::move(bind_data);
-		if (get.table_filters.filters.empty()) {
+		if (!get.table_filters.HasFilters()) {
 
 			// Remove the TopN operator
 			plan = std::move(top_n.children[0]);
@@ -172,22 +172,13 @@ public:
 
 		auto new_filter = make_uniq<LogicalFilter>();
 		auto &column_ids = get.GetColumnIds();
-		for (const auto &entry : get.table_filters.filters) {
-			idx_t column_id = entry.first;
-			auto &type = get.returned_types[column_id];
-			bool found = false;
-			for (idx_t i = 0; i < column_ids.size(); i++) {
-				if (column_ids[i].GetPrimaryIndex() == column_id) {
-					column_id = i;
-					found = true;
-					break;
-				}
-			}
-			if (!found) {
-				throw InternalException("Could not find column id for filter");
-			}
-			auto column = make_uniq<BoundColumnRefExpression>(type, ColumnBinding(get.table_index, column_id));
-			new_filter->expressions.push_back(entry.second->ToExpression(*column));
+		for (const auto &entry : get.table_filters) {
+			auto filter_idx = entry.GetIndex();
+			auto &column_id = get.GetColumnIndex(filter_idx);
+			auto &type = get.returned_types[column_id.GetPrimaryIndex()];
+			auto &filter = entry.Filter();
+			auto column = make_uniq<BoundColumnRefExpression>(type, ColumnBinding(get.table_index, filter_idx));
+			new_filter->expressions.push_back(filter.ToExpression(*column));
 		}
 		new_filter->children.push_back(std::move(get_ptr));
 		new_filter->ResolveOperatorTypes();
@@ -221,7 +212,7 @@ public:
 					column_binding_set_t referenced_bindings;
 					for (auto &expr : parent_projection.expressions) {
 						ExpressionIterator::EnumerateExpression(expr, [&](Expression &expr_ref) {
-							if (expr_ref.type == ExpressionType::BOUND_COLUMN_REF) {
+							if (expr_ref.GetExpressionType() == ExpressionType::BOUND_COLUMN_REF) {
 								auto &bound_column_ref = expr_ref.Cast<BoundColumnRefExpression>();
 								referenced_bindings.insert(bound_column_ref.binding);
 							}
@@ -260,8 +251,7 @@ public:
 // Register
 //-----------------------------------------------------------------------------
 void HNSWModule::RegisterScanOptimizer(DatabaseInstance &db) {
-	// Register the optimizer extension
-	db.config.optimizer_extensions.push_back(HNSWIndexScanOptimizer());
+	OptimizerExtension::Register(db.config, HNSWIndexScanOptimizer());
 }
 
 } // namespace duckdb
