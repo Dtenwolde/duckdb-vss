@@ -158,16 +158,16 @@ public:
 
 			const auto count = scan_chunk.size();
 			auto &vec_vec = scan_chunk.data[0];
-			auto &data_vec = ArrayVector::GetEntry(vec_vec);
+			auto &data_vec = ArrayVector::GetChild(vec_vec);
 			auto &rowid_vec = scan_chunk.data[1];
 
 			UnifiedVectorFormat vec_format;
 			UnifiedVectorFormat data_format;
 			UnifiedVectorFormat rowid_format;
 
-			vec_vec.ToUnifiedFormat(count, vec_format);
-			data_vec.ToUnifiedFormat(count * array_size, data_format);
-			rowid_vec.ToUnifiedFormat(count, rowid_format);
+			vec_vec.ToUnifiedFormat(vec_format);
+			data_vec.ToUnifiedFormat(data_format);
+			rowid_vec.ToUnifiedFormat(rowid_format);
 
 			const auto row_ptr = UnifiedVectorFormat::GetData<row_t>(rowid_format);
 			const auto data_ptr = UnifiedVectorFormat::GetData<float>(data_format);

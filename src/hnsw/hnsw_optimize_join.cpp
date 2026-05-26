@@ -125,7 +125,7 @@ OperatorResultType PhysicalHNSWIndexJoin::Execute(ExecutionContext &context, Dat
 	// The rest of the columns are the outer table columns
 
 	auto &rhs_vector_vector = input.data[outer_vector_column];
-	auto &rhs_vector_child = ArrayVector::GetEntry(rhs_vector_vector);
+	auto &rhs_vector_child = ArrayVector::GetChildMutable(rhs_vector_vector);
 	const auto rhs_vector_size = ArrayType::GetSize(rhs_vector_vector.GetType());
 	const auto rhs_vector_ptr = FlatVector::GetDataMutable<float>(rhs_vector_child);
 

@@ -430,7 +430,7 @@ void HNSWIndex::Construct(DataChunk &input, Vector &row_ids, idx_t thread_idx) {
 	input.Flatten();
 
 	auto &vec_vec = input.data[0];
-	auto &vec_child_vec = ArrayVector::GetEntry(vec_vec);
+	auto &vec_child_vec = ArrayVector::GetChild(vec_vec);
 	auto array_size = ArrayType::GetSize(vec_vec.GetType());
 
 	auto vec_child_data = FlatVector::GetData<float>(vec_child_vec);
@@ -499,7 +499,7 @@ void HNSWIndex::Delete(IndexLock &lock, DataChunk &input, Vector &rowid_vec) {
 	is_dirty = true;
 
 	auto count = input.size();
-	rowid_vec.Flatten(count);
+	rowid_vec.Flatten();
 	auto row_id_data = FlatVector::GetData<row_t>(rowid_vec);
 
 	// For deleting from the index, we need an exclusive lock
