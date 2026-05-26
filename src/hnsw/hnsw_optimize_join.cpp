@@ -2,6 +2,7 @@
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
 #include "duckdb/optimizer/column_binding_replacer.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
+#include "duckdb/optimizer/optimizer_extension.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_window_expression.hpp"
@@ -514,20 +515,20 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 	vector<reference<Expression>> bindings;
 
 	table_info.BindIndexes(context, HNSWIndex::TYPE_NAME);
-	table_info.GetIndexes().Scan([&](Index &index) {
+	for (auto &index : table_info.GetIndexes().Indexes()) {
 		if (!index.IsBound() || HNSWIndex::TYPE_NAME != index.GetIndexType()) {
-			return false;
+			continue;
 		}
 		auto &cast_index = index.Cast<HNSWIndex>();
 
 		// Reset the bindings
 		bindings.clear();
 		if (!cast_index.TryMatchDistanceFunction(distance_expr_ptr, bindings)) {
-			return false;
+			continue;
 		}
 		unique_ptr<Expression> bound_index_expr = nullptr;
 		if (!cast_index.TryBindIndexExpression(inner_get, bound_index_expr)) {
-			return false;
+			continue;
 		}
 
 		// We also have to replace the outer table index here with the delim_get table index
@@ -555,8 +556,8 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 
 		// Save the pointer to the index
 		index_ptr = &cast_index;
-		return true;
-	});
+		break;
+	}
 	if (!index_ptr) {
 		return false;
 	}
@@ -717,8 +718,7 @@ void HNSWIndexJoinOptimizer::Optimize(OptimizerExtensionInput &input, unique_ptr
 //------------------------------------------------------------------------------
 
 void HNSWModule::RegisterJoinOptimizer(DatabaseInstance &db) {
-	// Register the JoinOptimizer
-	db.config.optimizer_extensions.push_back(HNSWIndexJoinOptimizer());
+	OptimizerExtension::Register(db.config, HNSWIndexJoinOptimizer());
 }
 
 } // namespace duckdb
