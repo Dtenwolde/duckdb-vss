@@ -360,7 +360,9 @@ struct MultiScanState final : IndexScanState {
 	Vector vec;
 	vector<row_t> row_ids;
 	size_t ef_search;
-	MultiScanState(size_t ef_search_p) : vec(LogicalType::ROW_TYPE, nullptr), ef_search(ef_search_p) {
+	// NOTE: the vector must own a buffer: FlatVector::SetData (used in GetMultiScanResult)
+	// reads the existing buffer's validity mask, so a null-buffer vector crashes.
+	MultiScanState(size_t ef_search_p) : vec(LogicalType::ROW_TYPE), ef_search(ef_search_p) {
 	}
 };
 
