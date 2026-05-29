@@ -1,0 +1,37 @@
+# name: test/sql/hnsw/hnsw_lateral_join_plan.test
+# description: Regression test for issue #80. A batch (LATERAL) similarity search
+#              of the form `ORDER BY array_distance(...) LIMIT k` must be planned
+#              as HNSW_INDEX_JOIN. DuckDB 1.5 rewrites this pattern into an
+#              arg_min_nulls_last top-k aggregate (TopNWindowElimination), so the
+#              HNSW optimizer must recognise that plan shape, not just the older
+#              window/row_number shape.
+# group: [hnsw]
+
+require vss
+
+statement ok
+CREATE TABLE a (a_vec FLOAT[3], a_id INT);
+
+statement ok
+CREATE TABLE b (b_vec FLOAT[3], b_str VARCHAR);
+
+statement ok
+INSERT INTO a VALUES (ARRAY[1.0, 2.0, 3.0], 1), (ARRAY[4.0, 5.0, 6.0], 2);
+
+statement ok
+INSERT INTO b VALUES (ARRAY[4.0, 5.0, 6.0], 'b'), (ARRAY[1.0, 2.0, 3.0], 'a');
+
+statement ok
+CREATE INDEX my_idx ON b USING HNSW (b_vec);
+
+# LIMIT 1: rewritten to a single-value arg_min_nulls_last aggregate.
+query II
+EXPLAIN SELECT * FROM a, LATERAL (SELECT * FROM b ORDER BY array_distance(a.a_vec, b.b_vec) LIMIT 1);
+----
+physical_plan	<REGEX>:.*HNSW_INDEX_JOIN.*
+
+# LIMIT k > 1: rewritten to a top-k arg_min_nulls_last aggregate over a struct.
+query II
+EXPLAIN SELECT * FROM a, LATERAL (SELECT * FROM b ORDER BY array_distance(a.a_vec, b.b_vec) LIMIT 2);
+----
+physical_plan	<REGEX>:.*HNSW_INDEX_JOIN.*
