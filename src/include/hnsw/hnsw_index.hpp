@@ -15,7 +15,7 @@
 #include "duckdb/storage/storage_lock.hpp"
 #include "duckdb/storage/table/scan_state.hpp"
 
-#include "usearch/index_dense.hpp"
+#include "usearch/duckdb_usearch.hpp"
 
 namespace duckdb {
 
