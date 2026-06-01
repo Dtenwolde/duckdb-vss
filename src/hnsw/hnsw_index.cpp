@@ -620,12 +620,12 @@ static void TryBindIndexExpressionInternal(Expression &expr, TableIndex table_id
 		auto &ref = expr.Cast<BoundColumnRefExpression>();
 
 		// Rewrite the column reference to fit in the current set of bound column ids
-		ref.binding.table_index = table_idx;
+		ref.BindingMutable().table_index = table_idx;
 
-		const auto referenced_column = index_columns[ref.binding.column_index];
+		const auto referenced_column = index_columns[ref.Binding().column_index];
 		for (idx_t i = 0; i < table_columns.size(); i++) {
 			if (table_columns[i].GetPrimaryIndex() == referenced_column) {
-				ref.binding.column_index = ProjectionIndex(i);
+				ref.BindingMutable().column_index = ProjectionIndex(i);
 				return;
 			}
 		}

@@ -466,10 +466,10 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 		return false;
 	}
 	auto &filter_ref_expr = BoundComparisonExpression::Left(compare_expr).Cast<BoundColumnRefExpression>();
-	if (filter_ref_expr.binding.table_index != window.window_index) {
+	if (filter_ref_expr.Binding().table_index != window.window_index) {
 		return false;
 	}
-	if (filter_ref_expr.binding.column_index != ProjectionIndex(0)) {
+	if (filter_ref_expr.Binding().column_index != ProjectionIndex(0)) {
 		return false;
 	}
 
@@ -492,13 +492,13 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 	}
 	const auto &distance_ref_expr = window_expr.orders.back().expression->Cast<BoundColumnRefExpression>();
 	// Verify that this column ref references the distance expression in the projection
-	if (distance_ref_expr.binding.table_index != inner_proj.table_index) {
+	if (distance_ref_expr.Binding().table_index != inner_proj.table_index) {
 		return false;
 	}
-	if (distance_ref_expr.binding.column_index >= inner_proj.expressions.size()) {
+	if (distance_ref_expr.Binding().column_index >= inner_proj.expressions.size()) {
 		return false;
 	}
-	auto &distance_expr_ptr = *inner_proj.expressions[distance_ref_expr.binding.column_index];
+	auto &distance_expr_ptr = *inner_proj.expressions[distance_ref_expr.Binding().column_index];
 
 	//------------------------------------------------------------------------------
 	// Match the index
@@ -535,8 +535,8 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 		ExpressionIterator::EnumerateExpression(bound_index_expr, [&](Expression &child) {
 			if (child.GetExpressionType() == ExpressionType::BOUND_COLUMN_REF) {
 				auto &bound_colref_expr = child.Cast<BoundColumnRefExpression>();
-				if (bound_colref_expr.binding.table_index == outer_get.table_index) {
-					bound_colref_expr.binding.table_index = delim_get.table_index;
+				if (bound_colref_expr.Binding().table_index == outer_get.table_index) {
+					bound_colref_expr.BindingMutable().table_index = delim_get.table_index;
 				}
 			}
 		});
@@ -573,7 +573,7 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 	const auto &inner_ref_expr = bindings[2].get().Cast<BoundColumnRefExpression>();
 
 	// Sanity check
-	if (inner_ref_expr.binding.table_index != inner_get.table_index) {
+	if (inner_ref_expr.Binding().table_index != inner_get.table_index) {
 		// Well, we have to reference the rhs
 		return false;
 	}
@@ -590,8 +590,8 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 	index_join->inner_returned_types = inner_get.returned_types;
 
 	// TODO: this is kind of unsafe, column_index != physical index
-	index_join->outer_vector_column = outer_ref_expr.binding.column_index;
-	index_join->inner_vector_column = inner_ref_expr.binding.column_index;
+	index_join->outer_vector_column = outer_ref_expr.Binding().column_index;
+	index_join->inner_vector_column = inner_ref_expr.Binding().column_index;
 
 	ColumnBindingReplacer replacer;
 
@@ -636,31 +636,31 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 		auto &ref = expr->Cast<BoundColumnRefExpression>();
 
 		// If this references the inner table scan, reference the index join instead
-		if (ref.binding.table_index == inner_get.table_index) {
-			ref.binding.table_index = index_join->table_index;
+		if (ref.Binding().table_index == inner_get.table_index) {
+			ref.BindingMutable().table_index = index_join->table_index;
 		}
 
 		// If this references the outer proj, replace it with the inner proj
 		if (outer_proj_ptr) {
 			auto &outer_proj = outer_proj_ptr->get()->Cast<LogicalProjection>();
-			if (ref.binding.table_index == outer_proj.table_index) {
+			if (ref.Binding().table_index == outer_proj.table_index) {
 				// assert that this can only be bound column ref
-				const auto &outer_expr = outer_proj.GetExpression(ref.binding);
+				const auto &outer_expr = outer_proj.GetExpression(ref.Binding());
 				const auto &outer_ref = outer_expr.Cast<BoundColumnRefExpression>();
 
-				ref.binding = outer_ref.binding;
+				ref.BindingMutable() = outer_ref.Binding();
 			}
 		}
 
 		// If this references the inner proj, replace it with the actual expression
-		if (ref.binding.table_index == inner_proj.table_index) {
-			const auto &inner_expr = inner_proj.GetExpression(ref.binding);
+		if (ref.Binding().table_index == inner_proj.table_index) {
+			const auto &inner_expr = inner_proj.GetExpression(ref.Binding());
 			expr = inner_expr.Copy();
 			// These can still reference the delim_get, but we replace them in the next step.
 		}
 
 		// Special case: the window row number expression. Forward this to the index join
-		else if (ref.binding.table_index == window.window_index) {
+		else if (ref.Binding().table_index == window.window_index) {
 			// The special "row_number" expression is always the last column of the index_join itself
 			ColumnBinding index_row_number_binding(index_join->table_index, ProjectionIndex(index_join->inner_column_ids.size()));
 			expr = make_uniq<BoundColumnRefExpression>(LogicalType::BIGINT, index_row_number_binding);
