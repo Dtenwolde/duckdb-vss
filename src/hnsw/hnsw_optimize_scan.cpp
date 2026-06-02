@@ -64,7 +64,7 @@ public:
 		auto &projection = top_n.children.front()->Cast<LogicalProjection>();
 
 		// This the expression that is referenced by the order by expression
-		auto &projection_expr = *projection.expressions[bound_column_ref.binding.column_index];
+		auto &projection_expr = *projection.expressions[bound_column_ref.Binding().column_index];
 
 		// The projection must sit on top of a get
 		if (projection.children.size() != 1 || projection.children.front()->type != LogicalOperatorType::LOGICAL_GET) {
@@ -214,7 +214,7 @@ public:
 						ExpressionIterator::EnumerateExpression(expr, [&](Expression &expr_ref) {
 							if (expr_ref.GetExpressionType() == ExpressionType::BOUND_COLUMN_REF) {
 								auto &bound_column_ref = expr_ref.Cast<BoundColumnRefExpression>();
-								referenced_bindings.insert(bound_column_ref.binding);
+								referenced_bindings.insert(bound_column_ref.Binding());
 							}
 						});
 					}

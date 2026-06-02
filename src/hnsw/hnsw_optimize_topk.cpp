@@ -40,9 +40,9 @@ static unique_ptr<Expression> CreateListOrderByExpr(ClientContext &context, uniq
 
 	// We also need to order the list items by the distance
 	BoundOrderByNode order_by_node(OrderType::ASCENDING, OrderByNullType::NULLS_LAST, std::move(order_expr));
-	new_agg_expr->order_bys = make_uniq<BoundOrderModifier>();
-	new_agg_expr->order_bys->orders.push_back(std::move(order_by_node));
-	new_agg_expr->filter = std::move(filter_expr);
+	new_agg_expr->GetOrderBysMutable() = make_uniq<BoundOrderModifier>();
+	new_agg_expr->GetOrderBysMutable()->orders.push_back(std::move(order_by_node));
+	new_agg_expr->GetFilterMutable() = std::move(filter_expr);
 
 	return std::move(new_agg_expr);
 }
@@ -79,18 +79,18 @@ public:
 			return false;
 		}
 		auto &agg_func_expr = agg_expr->Cast<BoundAggregateExpression>();
-		if (agg_func_expr.function.GetName() != "min_by") {
+		if (agg_func_expr.Function().GetName() != "min_by") {
 			return false;
 		}
-		if (agg_func_expr.children.size() != 3) {
+		if (agg_func_expr.GetChildren().size() != 3) {
 			return false;
 		}
-		if (agg_func_expr.children[2]->GetExpressionType() != ExpressionType::VALUE_CONSTANT) {
+		if (agg_func_expr.GetChildren()[2]->GetExpressionType() != ExpressionType::VALUE_CONSTANT) {
 			return false;
 		}
-		const auto &col_expr = agg_func_expr.children[0];
-		auto &dist_expr = *agg_func_expr.children[1];
-		const auto &limit_expr = agg_func_expr.children[2];
+		const auto &col_expr = agg_func_expr.GetChildren()[0];
+		auto &dist_expr = *agg_func_expr.GetChildren()[1];
+		const auto &limit_expr = agg_func_expr.GetChildren()[2];
 
 		// we need the aggregate to be on top of a projection
 		if (agg.children.size() != 1) {
@@ -190,7 +190,7 @@ public:
 
 		// Replace the aggregate with a list() aggregate function ordered by the distance
 		agg.expressions[0] = CreateListOrderByExpr(context, col_expr->Copy(), dist_expr.Copy(),
-		                                           agg_func_expr.filter ? agg_func_expr.filter->Copy() : nullptr);
+		                                           agg_func_expr.GetFilter() ? agg_func_expr.GetFilter()->Copy() : nullptr);
 
 		if (!get.table_filters.HasFilters()) {
 			return true;
