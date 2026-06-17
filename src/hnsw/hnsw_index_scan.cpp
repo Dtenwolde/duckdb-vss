@@ -159,8 +159,8 @@ static InsertionOrderPreservingMap<string> HNSWIndexScanToString(TableFunctionTo
 	D_ASSERT(input.bind_data);
 	InsertionOrderPreservingMap<string> result;
 	auto &bind_data = input.bind_data->Cast<HNSWIndexScanBindData>();
-	result["Table"] = bind_data.table.name;
-	result["HNSW Index"] = bind_data.index.GetIndexName();
+	result["Table"] = bind_data.table.name.GetIdentifierName();
+	result["HNSW Index"] = bind_data.index.GetIndexName().GetIdentifierName();
 	return result;
 }
 
