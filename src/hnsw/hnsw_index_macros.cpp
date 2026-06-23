@@ -86,17 +86,17 @@ static void RegisterTableMacro(ExtensionLoader &loader, const string &name, cons
 
 	auto func = make_uniq<TableMacroFunction>(std::move(node));
 	for (auto &param : params) {
-		func->parameters.push_back(make_uniq<ColumnRefExpression>(param));
+		func->parameters.push_back(make_uniq<ColumnRefExpression>(Identifier(param)));
 	}
 
 	for (auto &param : named_params) {
-		func->parameters.push_back(make_uniq<ColumnRefExpression>(param.first));
+		func->parameters.push_back(make_uniq<ColumnRefExpression>(Identifier(param.first)));
 		func->default_parameters[param.first] = make_uniq<ConstantExpression>(param.second);
 	}
 
 	CreateMacroInfo info(CatalogType::TABLE_MACRO_ENTRY);
 	info.schema = DEFAULT_SCHEMA;
-	info.name = name;
+	info.name = Identifier(name);
 	info.temporary = true;
 	info.internal = true;
 	info.macros.push_back(std::move(func));

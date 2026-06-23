@@ -149,7 +149,7 @@ public:
 //------------------------------------------------------------------------------
 
 // Constructor
-HNSWIndex::HNSWIndex(const string &name, IndexConstraintType index_constraint_type, const vector<column_t> &column_ids,
+HNSWIndex::HNSWIndex(const Identifier &name, IndexConstraintType index_constraint_type, const vector<column_t> &column_ids,
                      TableIOManager &table_io_manager, const vector<unique_ptr<Expression>> &unbound_expressions,
                      AttachedDatabase &db, const case_insensitive_map_t<Value> &options, const IndexStorageInfo &info,
                      idx_t estimated_cardinality)
@@ -360,7 +360,9 @@ struct MultiScanState final : IndexScanState {
 	Vector vec;
 	vector<row_t> row_ids;
 	size_t ef_search;
-	MultiScanState(size_t ef_search_p) : vec(LogicalType::ROW_TYPE, nullptr), ef_search(ef_search_p) {
+	// NOTE: the vector must own a buffer: FlatVector::SetData (used in GetMultiScanResult)
+	// reads the existing buffer's validity mask, so a null-buffer vector crashes.
+	MultiScanState(size_t ef_search_p) : vec(LogicalType::ROW_TYPE), ef_search(ef_search_p) {
 	}
 };
 
@@ -662,7 +664,7 @@ bool HNSWIndex::TryMatchDistanceFunction(Expression &expr,
 }
 
 unique_ptr<ExpressionMatcher> HNSWIndex::MakeFunctionMatcher() const {
-	unordered_set<string> distance_functions;
+	identifier_set_t distance_functions;
 	switch (index.metric().metric_kind()) {
 	case unum::usearch::metric_kind_t::l2sq_k:
 		distance_functions = {"array_distance", "<->"};

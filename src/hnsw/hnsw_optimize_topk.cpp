@@ -161,14 +161,14 @@ public:
 			}
 
 			const auto vector_size = cast_index.GetVectorSize();
-			const auto &matched_vector = const_expr_ref.get().Cast<BoundConstantExpression>().value;
+			const auto &matched_vector = const_expr_ref.get().Cast<BoundConstantExpression>().GetValue();
 
 			auto query_vector = make_unsafe_uniq_array<float>(vector_size);
 			auto vector_elements = ArrayValue::GetChildren(matched_vector);
 			for (idx_t i = 0; i < vector_size; i++) {
 				query_vector[i] = vector_elements[i].GetValue<float>();
 			}
-			const auto k_limit = limit_expr->Cast<BoundConstantExpression>().value.GetValue<int32_t>();
+			const auto k_limit = limit_expr->Cast<BoundConstantExpression>().GetValue().GetValue<int32_t>();
 			if (k_limit <= 0 || k_limit >= STANDARD_VECTOR_SIZE) {
 				continue;
 			}

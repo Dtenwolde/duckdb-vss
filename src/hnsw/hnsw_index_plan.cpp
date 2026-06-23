@@ -123,7 +123,7 @@ PhysicalOperator &HNSWIndex::CreatePlan(PlanIndexInput &input) {
 		auto is_not_null_expr =
 		    make_uniq<BoundOperatorExpression>(ExpressionType::OPERATOR_IS_NOT_NULL, LogicalType::BOOLEAN);
 		auto bound_ref = make_uniq<BoundReferenceExpression>(new_column_types[i], i);
-		is_not_null_expr->children.push_back(std::move(bound_ref));
+		is_not_null_expr->GetChildrenMutable().push_back(std::move(bound_ref));
 		filter_select_list.push_back(std::move(is_not_null_expr));
 	}
 
