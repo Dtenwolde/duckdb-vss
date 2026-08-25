@@ -331,7 +331,10 @@ unique_ptr<IndexScanState> HNSWIndex::InitializeScan(float *query_vector, idx_t 
 
 	// Acquire a shared lock to search the index
 	auto lock = rwlock.GetSharedLock();
-	auto search_result = index.ef_search(query_vector, limit, ef_search);
+	unum::usearch::index_search_config_t search_config;
+	search_config.expansion = ef_search;
+	search_config.thread = USearchIndexType::any_thread();
+	auto search_result = index.search(query_vector, limit, search_config);
 
 	state->current_row = 0;
 	state->total_rows = search_result.size();
@@ -386,11 +389,13 @@ unique_ptr<IndexScanState> HNSWIndex::InitializeMultiScan(ClientContext &context
 idx_t HNSWIndex::ExecuteMultiScan(IndexScanState &state_p, float *query_vector, idx_t limit) {
 	auto &state = state_p.Cast<MultiScanState>();
 
-	USearchIndexType::search_result_t search_result;
-	{
+	auto search_result = [&]() {
 		auto lock = rwlock.GetSharedLock();
-		search_result = index.ef_search(query_vector, limit, state.ef_search);
-	}
+		unum::usearch::index_search_config_t search_config;
+		search_config.expansion = state.ef_search;
+		search_config.thread = USearchIndexType::any_thread();
+		return index.search(query_vector, limit, search_config);
+	}();
 
 	const auto offset = state.row_ids.size();
 	state.row_ids.resize(state.row_ids.size() + search_result.size());

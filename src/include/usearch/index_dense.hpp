@@ -893,6 +893,18 @@ class index_dense_gt {
     search_result_t search(u8_t const* vector, std::size_t wanted, std::size_t thread = any_thread(), bool exact = false) const { return search_(vector, wanted, dummy_predicate_t {}, thread, exact, casts_.from.u8); }
     search_result_t search(b1x8_t const* vector, std::size_t wanted, std::size_t thread = any_thread(), bool exact = false) const { return search_(vector, wanted, dummy_predicate_t {}, thread, exact, casts_.from.b1x8); }
 
+    search_result_t search(f64_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.f64); }
+    search_result_t search(f32_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.f32); }
+    search_result_t search(bf16_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.bf16); }
+    search_result_t search(f16_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.f16); }
+    search_result_t search(e5m2_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.e5m2); }
+    search_result_t search(e4m3_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.e4m3); }
+    search_result_t search(e3m2_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.e3m2); }
+    search_result_t search(e2m3_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.e2m3); }
+    search_result_t search(i8_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.i8); }
+    search_result_t search(u8_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.u8); }
+    search_result_t search(b1x8_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.b1x8); }
+
     template <typename predicate_at> search_result_t filtered_search(f64_t const* vector, std::size_t wanted, predicate_at&& predicate, std::size_t thread = any_thread(), bool exact = false) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), thread, exact, casts_.from.f64); }
     template <typename predicate_at> search_result_t filtered_search(f32_t const* vector, std::size_t wanted, predicate_at&& predicate, std::size_t thread = any_thread(), bool exact = false) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), thread, exact, casts_.from.f32); }
     template <typename predicate_at> search_result_t filtered_search(bf16_t const* vector, std::size_t wanted, predicate_at&& predicate, std::size_t thread = any_thread(), bool exact = false) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), thread, exact, casts_.from.bf16); }
@@ -904,6 +916,18 @@ class index_dense_gt {
     template <typename predicate_at> search_result_t filtered_search(i8_t const* vector, std::size_t wanted, predicate_at&& predicate, std::size_t thread = any_thread(), bool exact = false) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), thread, exact, casts_.from.i8); }
     template <typename predicate_at> search_result_t filtered_search(u8_t const* vector, std::size_t wanted, predicate_at&& predicate, std::size_t thread = any_thread(), bool exact = false) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), thread, exact, casts_.from.u8); }
     template <typename predicate_at> search_result_t filtered_search(b1x8_t const* vector, std::size_t wanted, predicate_at&& predicate, std::size_t thread = any_thread(), bool exact = false) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), thread, exact, casts_.from.b1x8); }
+
+    template <typename predicate_at> search_result_t filtered_search(f64_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.f64); }
+    template <typename predicate_at> search_result_t filtered_search(f32_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.f32); }
+    template <typename predicate_at> search_result_t filtered_search(bf16_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.bf16); }
+    template <typename predicate_at> search_result_t filtered_search(f16_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.f16); }
+    template <typename predicate_at> search_result_t filtered_search(e5m2_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.e5m2); }
+    template <typename predicate_at> search_result_t filtered_search(e4m3_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.e4m3); }
+    template <typename predicate_at> search_result_t filtered_search(e3m2_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.e3m2); }
+    template <typename predicate_at> search_result_t filtered_search(e2m3_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.e2m3); }
+    template <typename predicate_at> search_result_t filtered_search(i8_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.i8); }
+    template <typename predicate_at> search_result_t filtered_search(u8_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.u8); }
+    template <typename predicate_at> search_result_t filtered_search(b1x8_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.b1x8); }
 
     std::size_t get(vector_key_t key, f64_t* vector, std::size_t vectors_count = 1) const { return get_(key, vector, vectors_count, casts_.to.f64); }
     std::size_t get(vector_key_t key, f32_t* vector, std::size_t vectors_count = 1) const { return get_(key, vector, vectors_count, casts_.to.f32); }
@@ -1050,17 +1074,18 @@ class index_dense_gt {
      */
     bool try_reserve(index_limits_t limits) {
 
+        // Reserving is monotonic: reducing thread limits must not shrink member-addressed storage.
+        limits.members = (std::max)(limits.members, typed_->capacity());
+        limits.members = (std::max)(limits.members, vectors_lookup_.size());
+
         // The slot lookup system will generally prefer power-of-two sizes.
         if (config_.enable_key_lookups) {
             unique_lock_t lock(slot_lookup_mutex_);
             if (!slot_lookup_.try_reserve(limits.members))
                 return false;
-            limits.members = slot_lookup_.capacity();
         }
 
-        // Once the `slot_lookup_` grows, let's use its capacity as the new
-        // target for the `vectors_lookup_` to synchronize allocations and
-        // expensive index re-organizations.
+        // Hash-table load-factor slack does not need corresponding vector or graph slots.
         if (limits.members != vectors_lookup_.size()) {
             vectors_lookup_t new_vectors_lookup(limits.members);
             if (!new_vectors_lookup)
@@ -1358,6 +1383,11 @@ class index_dense_gt {
         if (!result)
             return result;
 
+        // `offset` is caller-supplied, so every `file.size() - offset` below would
+        // otherwise underflow into a huge span instead of failing.
+        if (offset > file.size())
+            return result.failed("File is corrupted and lacks matrix dimensions");
+
         // Infer the new index size
         std::uint64_t matrix_rows = 0;
         std::uint64_t matrix_cols = 0;
@@ -1383,7 +1413,12 @@ class index_dense_gt {
                 matrix_cols = dimensions[1];
                 offset += sizeof(dimensions);
             }
-            vectors_buffer = {file.data() + offset, static_cast<std::size_t>(matrix_rows * matrix_cols)};
+            // bound the vectors matrix span against the file (overflow-safe; offset <= file.size() holds here)
+            checked_size_result_t vectors_bytes =
+                checked_mul(static_cast<std::size_t>(matrix_rows), static_cast<std::size_t>(matrix_cols));
+            if (!vectors_bytes || file.size() - offset < vectors_bytes.value)
+                return result.failed("File is corrupted: vectors matrix exceeds file size");
+            vectors_buffer = {file.data() + offset, vectors_bytes.value};
             offset += vectors_buffer.size();
         }
 
@@ -2217,8 +2252,19 @@ class index_dense_gt {
     search_result_t search_(scalar_at const* vector, std::size_t wanted, predicate_at&& predicate, std::size_t thread,
                             bool exact, cast_punned_t const& cast) const {
 
+        index_search_config_t search_config;
+        search_config.thread = thread;
+        search_config.expansion = config_.expansion_search;
+        search_config.exact = exact;
+        return search_(vector, wanted, std::forward<predicate_at>(predicate), search_config, cast);
+    }
+
+    template <typename scalar_at, typename predicate_at>
+    search_result_t search_(scalar_at const* vector, std::size_t wanted, predicate_at&& predicate,
+                            index_search_config_t search_config, cast_punned_t const& cast) const {
+
         // Cast the vector, if needed for compatibility with `metric_`
-        thread_lock_t lock = thread_lock_(thread);
+        thread_lock_t lock = thread_lock_(search_config.thread);
         if (!lock)
             return search_result_t{*this}.failed("Reserve capacity ahead of searches!");
         byte_t const* vector_data = reinterpret_cast<byte_t const*>(vector);
@@ -2229,10 +2275,7 @@ class index_dense_gt {
                 vector_data = casted_data;
         }
 
-        index_search_config_t search_config;
         search_config.thread = lock.thread_id;
-        search_config.expansion = config_.expansion_search;
-        search_config.exact = exact;
 
         vector_key_t free_key_copy = free_key_;
         if (std::is_same<typename std::decay<predicate_at>::type, dummy_predicate_t>::value) {
