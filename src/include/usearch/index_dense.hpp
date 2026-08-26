@@ -893,17 +893,13 @@ class index_dense_gt {
     search_result_t search(u8_t const* vector, std::size_t wanted, std::size_t thread = any_thread(), bool exact = false) const { return search_(vector, wanted, dummy_predicate_t {}, thread, exact, casts_.from.u8); }
     search_result_t search(b1x8_t const* vector, std::size_t wanted, std::size_t thread = any_thread(), bool exact = false) const { return search_(vector, wanted, dummy_predicate_t {}, thread, exact, casts_.from.b1x8); }
 
-    search_result_t search(f64_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.f64); }
-    search_result_t search(f32_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.f32); }
-    search_result_t search(bf16_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.bf16); }
-    search_result_t search(f16_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.f16); }
-    search_result_t search(e5m2_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.e5m2); }
-    search_result_t search(e4m3_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.e4m3); }
-    search_result_t search(e3m2_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.e3m2); }
-    search_result_t search(e2m3_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.e2m3); }
-    search_result_t search(i8_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.i8); }
-    search_result_t search(u8_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.u8); }
-    search_result_t search(b1x8_t const* vector, std::size_t wanted, index_search_config_t config) const { return search_(vector, wanted, dummy_predicate_t {}, config, casts_.from.b1x8); }
+    search_result_t ef_search(f32_t const* vector, std::size_t wanted, std::size_t ef_search, std::size_t thread = any_thread(), bool exact = false) const {
+        index_search_config_t search_config;
+        search_config.thread = thread;
+        search_config.expansion = ef_search;
+        search_config.exact = exact;
+        return search_(vector, wanted, dummy_predicate_t {}, search_config, casts_.from.f32);
+    }
 
     template <typename predicate_at> search_result_t filtered_search(f64_t const* vector, std::size_t wanted, predicate_at&& predicate, std::size_t thread = any_thread(), bool exact = false) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), thread, exact, casts_.from.f64); }
     template <typename predicate_at> search_result_t filtered_search(f32_t const* vector, std::size_t wanted, predicate_at&& predicate, std::size_t thread = any_thread(), bool exact = false) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), thread, exact, casts_.from.f32); }
@@ -916,18 +912,6 @@ class index_dense_gt {
     template <typename predicate_at> search_result_t filtered_search(i8_t const* vector, std::size_t wanted, predicate_at&& predicate, std::size_t thread = any_thread(), bool exact = false) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), thread, exact, casts_.from.i8); }
     template <typename predicate_at> search_result_t filtered_search(u8_t const* vector, std::size_t wanted, predicate_at&& predicate, std::size_t thread = any_thread(), bool exact = false) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), thread, exact, casts_.from.u8); }
     template <typename predicate_at> search_result_t filtered_search(b1x8_t const* vector, std::size_t wanted, predicate_at&& predicate, std::size_t thread = any_thread(), bool exact = false) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), thread, exact, casts_.from.b1x8); }
-
-    template <typename predicate_at> search_result_t filtered_search(f64_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.f64); }
-    template <typename predicate_at> search_result_t filtered_search(f32_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.f32); }
-    template <typename predicate_at> search_result_t filtered_search(bf16_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.bf16); }
-    template <typename predicate_at> search_result_t filtered_search(f16_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.f16); }
-    template <typename predicate_at> search_result_t filtered_search(e5m2_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.e5m2); }
-    template <typename predicate_at> search_result_t filtered_search(e4m3_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.e4m3); }
-    template <typename predicate_at> search_result_t filtered_search(e3m2_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.e3m2); }
-    template <typename predicate_at> search_result_t filtered_search(e2m3_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.e2m3); }
-    template <typename predicate_at> search_result_t filtered_search(i8_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.i8); }
-    template <typename predicate_at> search_result_t filtered_search(u8_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.u8); }
-    template <typename predicate_at> search_result_t filtered_search(b1x8_t const* vector, std::size_t wanted, predicate_at&& predicate, index_search_config_t config) const { return search_(vector, wanted, std::forward<predicate_at>(predicate), config, casts_.from.b1x8); }
 
     std::size_t get(vector_key_t key, f64_t* vector, std::size_t vectors_count = 1) const { return get_(key, vector, vectors_count, casts_.to.f64); }
     std::size_t get(vector_key_t key, f32_t* vector, std::size_t vectors_count = 1) const { return get_(key, vector, vectors_count, casts_.to.f32); }
