@@ -7,6 +7,7 @@
 #include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/execution/index/bound_index.hpp"
+#include "duckdb/execution/index/index_type.hpp"
 #include "duckdb/execution/index/index_pointer.hpp"
 #include "duckdb/execution/index/fixed_size_allocator.hpp"
 #include "duckdb/optimizer/matcher/expression_matcher.hpp"

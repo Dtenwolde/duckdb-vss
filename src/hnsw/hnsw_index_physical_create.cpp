@@ -5,6 +5,7 @@
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/common/exception/transaction_exception.hpp"
+#include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/storage/data_table.hpp"
@@ -72,7 +73,7 @@ unique_ptr<GlobalSinkState> PhysicalCreateHNSWIndex::GetGlobalSinkState(ClientCo
 	auto &constraint_type = info->constraint_type;
 	auto &db = storage.db;
 	gstate->global_index =
-	    make_uniq<HNSWIndex>(info->index_name, constraint_type, storage_ids, table_manager, unbound_expressions, db,
+	    make_uniq<HNSWIndex>(info->GetIndexName(), constraint_type, storage_ids, table_manager, unbound_expressions, db,
 	                         info->options, IndexStorageInfo(), estimated_cardinality);
 
 	return std::move(gstate);
@@ -269,9 +270,10 @@ public:
 		auto &schema = table.schema;
 		info.column_ids = storage_ids;
 
-		if (schema.GetEntry(schema.GetCatalogTransaction(*gstate.context), CatalogType::INDEX_ENTRY, info.index_name)) {
+		if (schema.GetEntry(schema.GetCatalogTransaction(*gstate.context), CatalogType::INDEX_ENTRY,
+		                    info.GetIndexName())) {
 			if (info.on_conflict != OnCreateConflict::IGNORE_ON_CONFLICT) {
-				throw CatalogException("Index with name \"%s\" already exists", info.index_name);
+				throw CatalogException("Index with name \"%s\" already exists", info.GetIndexName());
 			}
 		}
 

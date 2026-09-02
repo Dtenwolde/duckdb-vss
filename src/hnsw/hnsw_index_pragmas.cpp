@@ -39,7 +39,7 @@ namespace duckdb {
 
 // BIND
 static unique_ptr<FunctionData> HNSWindexInfoBind(ClientContext &context, TableFunctionBindInput &input,
-                                                  vector<LogicalType> &return_types, vector<string> &names) {
+                                                  vector<LogicalType> &return_types, vector<Identifier> &names) {
 	names.emplace_back("catalog_name");
 	return_types.emplace_back(LogicalType::VARCHAR);
 
@@ -188,12 +188,11 @@ static void CompactIndexPragma(ClientContext &context, const FunctionParameters 
 	auto qname = QualifiedName::Parse(index_name);
 
 	// look up the index name in the catalog
-	Binder::BindSchemaOrCatalog(context, qname.catalog, qname.schema);
-	auto &index_entry = Catalog::GetEntry(context, CatalogType::INDEX_ENTRY, qname.catalog, qname.schema, qname.name)
-	                        .Cast<IndexCatalogEntry>();
-	auto &table_entry = Catalog::GetEntry(context, CatalogType::TABLE_ENTRY, qname.catalog, index_entry.GetSchemaName(),
-	                                      index_entry.GetTableName())
-	                        .Cast<TableCatalogEntry>();
+	Binder::BindSchemaOrCatalog(context, qname);
+	auto &index_entry = Catalog::GetEntry(context, CatalogType::INDEX_ENTRY, qname).Cast<IndexCatalogEntry>();
+	auto table_name =
+	    QualifiedName(index_entry.catalog.GetName(), index_entry.GetSchemaName(), index_entry.GetTableName());
+	auto &table_entry = Catalog::GetEntry<TableCatalogEntry>(context, table_name);
 
 	auto &storage = table_entry.GetStorage();
 	bool found_index = false;
