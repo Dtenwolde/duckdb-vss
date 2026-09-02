@@ -1,8 +1,8 @@
 #include "duckdb/function/table_macro_function.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
-#include "hnsw/hnsw.hpp"
-#include "duckdb/parser/parser.hpp"
 #include "duckdb/parser/parsed_data/create_macro_info.hpp"
+#include "duckdb/parser/parser.hpp"
+#include "hnsw/hnsw.hpp"
 
 namespace duckdb {
 
@@ -90,13 +90,14 @@ static void RegisterTableMacro(ExtensionLoader &loader, const string &name, cons
 	}
 
 	for (auto &param : named_params) {
-		func->parameters.push_back(make_uniq<ColumnRefExpression>(Identifier(param.first)));
-		func->default_parameters[param.first] = make_uniq<ConstantExpression>(param.second);
+		func->parameters.push_back(make_uniq<ColumnRefExpression>(param.first));
+		func->default_parameters[Identifier(param.first)] = make_uniq<ConstantExpression>(Value(param.second));
 	}
 
 	CreateMacroInfo info(CatalogType::TABLE_MACRO_ENTRY);
-	info.schema = DEFAULT_SCHEMA;
-	info.name = Identifier(name);
+	info.SetQualifiedName(
+	    QualifiedName(info.GetQualifiedName().Catalog(), Identifier::DefaultSchema(), info.GetQualifiedName().Name()));
+	info.SetFunctionName(Identifier(name));
 	info.temporary = true;
 	info.internal = true;
 	info.macros.push_back(std::move(func));

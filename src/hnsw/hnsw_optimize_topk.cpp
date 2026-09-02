@@ -32,7 +32,7 @@ static unique_ptr<Expression> CreateListOrderByExpr(ClientContext &context, uniq
 		return nullptr;
 	}
 
-	const auto &func = func_entry->functions.GetFunctionByOffset(0);
+	const auto &func = *func_entry->functions.GetFunctionByOffset(0);
 	vector<unique_ptr<Expression>> arguments;
 	arguments.push_back(std::move(elem_expr));
 
@@ -126,22 +126,23 @@ public:
 		vector<reference<Expression>> bindings;
 
 		table_info.BindIndexes(context, HNSWIndex::TYPE_NAME);
-		for (auto &index : table_info.GetIndexes().Indexes()) {
-			if (!index.IsBound() || HNSWIndex::TYPE_NAME != index.GetIndexType()) {
+		for (auto index_entry : table_info.GetIndexes().IndexEntries()) {
+			if (index_entry->GetBindState() != IndexBindState::BOUND ||
+			    HNSWIndex::TYPE_NAME != index_entry->GetIndexType()) {
 				continue;
 			}
-			auto &cast_index = index.Cast<HNSWIndex>();
+			auto guard = index_entry->GetReadHandle<HNSWIndex>();
 
 			// Reset the bindings
 			bindings.clear();
 
 			// Check that the projection expression is a distance function that matches the index
-			if (!cast_index.TryMatchDistanceFunction(dist_expr, bindings)) {
+			if (!guard->TryMatchDistanceFunction(dist_expr, bindings)) {
 				continue;
 			}
 			// Check that the HNSW index actually indexes the expression
 			unique_ptr<Expression> index_expr;
-			if (!cast_index.TryBindIndexExpression(get, index_expr)) {
+			if (!guard->TryBindIndexExpression(get, index_expr)) {
 				continue;
 			}
 
@@ -160,7 +161,7 @@ public:
 				}
 			}
 
-			const auto vector_size = cast_index.GetVectorSize();
+			const auto vector_size = guard->GetVectorSize();
 			const auto &matched_vector = const_expr_ref.get().Cast<BoundConstantExpression>().GetValue();
 
 			auto query_vector = make_unsafe_uniq_array<float>(vector_size);
@@ -172,7 +173,8 @@ public:
 			if (k_limit <= 0 || k_limit >= STANDARD_VECTOR_SIZE) {
 				continue;
 			}
-			bind_data = make_uniq<HNSWIndexScanBindData>(duck_table, cast_index, k_limit, std::move(query_vector));
+			bind_data = make_uniq<HNSWIndexScanBindData>(duck_table, index_entry, guard->GetIndexName(), k_limit,
+			                                             std::move(query_vector));
 			break;
 		}
 
@@ -189,8 +191,9 @@ public:
 		get.bind_data = std::move(bind_data);
 
 		// Replace the aggregate with a list() aggregate function ordered by the distance
-		agg.expressions[0] = CreateListOrderByExpr(context, col_expr->Copy(), dist_expr.Copy(),
-		                                           agg_func_expr.GetFilter() ? agg_func_expr.GetFilter()->Copy() : nullptr);
+		agg.expressions[0] =
+		    CreateListOrderByExpr(context, col_expr->Copy(), dist_expr.Copy(),
+		                          agg_func_expr.GetFilter() ? agg_func_expr.GetFilter()->Copy() : nullptr);
 
 		if (!get.table_filters.HasFilters()) {
 			return true;

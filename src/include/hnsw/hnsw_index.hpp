@@ -4,6 +4,7 @@
 #include "duckdb/common/helper.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/typedefs.hpp"
+#include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/execution/index/bound_index.hpp"
@@ -51,13 +52,13 @@ public:
 	//! The allocator used to persist linked blocks
 	unique_ptr<FixedSizeAllocator> linked_block_allocator;
 
-	unique_ptr<IndexScanState> InitializeMultiScan(ClientContext &context);
-	idx_t ExecuteMultiScan(IndexScanState &state, float *query_vector, idx_t limit);
-	const Vector &GetMultiScanResult(IndexScanState &state);
-	void ResetMultiScan(IndexScanState &state);
+	unique_ptr<IndexScanState> InitializeMultiScan(ClientContext &context) const;
+	idx_t ExecuteMultiScan(IndexScanState &state, float *query_vector, idx_t limit) const;
+	const Vector &GetMultiScanResult(IndexScanState &state) const;
+	void ResetMultiScan(IndexScanState &state) const;
 
-	unique_ptr<IndexScanState> InitializeScan(float *query_vector, idx_t limit, ClientContext &context);
-	idx_t Scan(IndexScanState &state, Vector &result, idx_t result_offset = 0);
+	unique_ptr<IndexScanState> InitializeScan(float *query_vector, idx_t limit, ClientContext &context) const;
+	static idx_t Scan(IndexScanState &state, Vector &result, idx_t result_offset = 0);
 	idx_t GetVectorSize() const;
 	string GetMetric() const;
 
@@ -65,7 +66,7 @@ public:
 	void PersistToDisk();
 	void Compact();
 
-	unique_ptr<HNSWIndexStats> GetStats();
+	unique_ptr<HNSWIndexStats> GetStats() const;
 
 	void VerifyBuffers(IndexLock &lock) override;
 
@@ -91,7 +92,7 @@ public:
 	//! Serializes HNSW memory to the WAL and returns the index storage information.
 	IndexStorageInfo SerializeToWAL(const case_insensitive_map_t<Value> &options) override;
 
-	idx_t GetInMemorySize(IndexLock &state) override;
+	idx_t GetInMemorySize(IndexLock &state) const override;
 
 	//! Merge another index into this index. The lock obtained from InitializeLock must be held, and the other
 	//! index must also be locked during the merge
@@ -108,7 +109,7 @@ public:
 	void VerifyAllocations(IndexLock &state) override;
 
 	string GetConstraintViolationMessage(VerifyExistenceType verify_type, idx_t failed_index,
-	                                     DataChunk &input) override {
+	                                     DataChunk &input) const override {
 		return "Constraint violation in HNSW index";
 	}
 
@@ -121,7 +122,7 @@ public:
 
 private:
 	bool is_dirty = false;
-	StorageLock rwlock;
+	mutable StorageLock rwlock;
 	atomic<idx_t> index_size = {0};
 	unique_ptr<ExpressionMatcher> function_matcher;
 	unique_ptr<ExpressionMatcher> MakeFunctionMatcher() const;

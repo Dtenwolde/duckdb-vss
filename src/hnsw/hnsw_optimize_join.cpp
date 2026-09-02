@@ -38,10 +38,10 @@ public:
 	static constexpr const PhysicalOperatorType TYPE = PhysicalOperatorType::EXTENSION;
 
 	PhysicalHNSWIndexJoin(PhysicalPlan &physical_plan, const vector<LogicalType> &types_p,
-	                      const idx_t estimated_cardinality, DuckTableEntry &table_p, HNSWIndex &hnsw_index_p,
-	                      const idx_t limit_p)
+	                      const idx_t estimated_cardinality, DuckTableEntry &table_p,
+	                      shared_ptr<IndexEntry> index_entry_p, const idx_t limit_p)
 	    : PhysicalOperator(physical_plan, TYPE, types_p, estimated_cardinality), table(table_p),
-	      hnsw_index(hnsw_index_p), limit(limit_p) {
+	      index_entry(std::move(index_entry_p)), index_name(index_entry->GetName()), limit(limit_p) {
 	}
 
 public:
@@ -54,7 +54,8 @@ public:
 
 public:
 	DuckTableEntry &table;
-	HNSWIndex &hnsw_index;
+	shared_ptr<IndexEntry> index_entry;
+	Identifier index_name;
 	idx_t limit;
 
 	vector<column_t> inner_column_ids;
@@ -109,7 +110,10 @@ unique_ptr<OperatorState> PhysicalHNSWIndexJoin::GetOperatorState(ExecutionConte
 	local_storage.InitializeScan(table.GetStorage(), result->local_storage_state.local_state, nullptr);
 
 	// Initialize the index scan state
-	result->index_state = hnsw_index.InitializeMultiScan(context.client);
+	{
+		auto index = index_entry->GetReadHandle<HNSWIndex>();
+		result->index_state = index->InitializeMultiScan(context.client);
+	}
 
 	return std::move(result);
 }
@@ -135,29 +139,32 @@ OperatorResultType PhysicalHNSWIndexJoin::Execute(ExecutionContext &context, Dat
 	// We mimic the window row_number() operator here and output the row number in each batch, basically.
 	const auto row_number_vector = FlatVector::GetDataMutable<int64_t>(chunk.data[MATCH_COLUMN_OFFSET]);
 
-	hnsw_index.ResetMultiScan(*state.index_state);
-
-	// How many batches are we going to process?
-	const auto batch_count = MinValue(input.size() - state.input_idx, STANDARD_VECTOR_SIZE / limit);
 	idx_t output_idx = 0;
-	for (idx_t batch_idx = 0; batch_idx < batch_count; batch_idx++, state.input_idx++) {
+	optional_ptr<const Vector> row_ids;
+	{
+		auto index = index_entry->GetReadHandle<HNSWIndex>();
+		index->ResetMultiScan(*state.index_state);
 
-		// Get the next batch
-		const auto rhs_vector_data = rhs_vector_ptr + state.input_idx * rhs_vector_size;
+		// How many batches are we going to process?
+		const auto batch_count = MinValue(input.size() - state.input_idx, STANDARD_VECTOR_SIZE / limit);
+		for (idx_t batch_idx = 0; batch_idx < batch_count; batch_idx++, state.input_idx++) {
 
-		// Scan the index for row ids
-		const auto match_count = hnsw_index.ExecuteMultiScan(*state.index_state, rhs_vector_data, limit);
-		for (idx_t i = 0; i < match_count; i++) {
-			state.match_sel.set_index(output_idx, state.input_idx);
-			row_number_vector[output_idx] = i + 1; // Note: 1-indexed!
-			output_idx++;
+			// Get the next batch
+			const auto rhs_vector_data = rhs_vector_ptr + state.input_idx * rhs_vector_size;
+
+			// Scan the index for row ids
+			const auto match_count = index->ExecuteMultiScan(*state.index_state, rhs_vector_data, limit);
+			for (idx_t i = 0; i < match_count; i++) {
+				state.match_sel.set_index(output_idx, state.input_idx);
+				row_number_vector[output_idx] = i + 1; // Note: 1-indexed!
+				output_idx++;
+			}
 		}
+		row_ids = index->GetMultiScanResult(*state.index_state);
 	}
 
-	const auto &row_ids = hnsw_index.GetMultiScanResult(*state.index_state);
-
 	// Execute one big fetch for the LHS
-	table.GetStorage().Fetch(transcation, chunk, state.physical_column_ids, row_ids, output_idx, state.fetch_state);
+	table.GetStorage().Fetch(transcation, chunk, state.physical_column_ids, *row_ids, output_idx, state.fetch_state);
 
 	// Now slice the chunk so that we include the rhs too
 	chunk.Slice(input, state.match_sel, output_idx, OUTER_COLUMN_OFFSET);
@@ -176,9 +183,8 @@ OperatorResultType PhysicalHNSWIndexJoin::Execute(ExecutionContext &context, Dat
 InsertionOrderPreservingMap<string> PhysicalHNSWIndexJoin::ParamsToString() const {
 	InsertionOrderPreservingMap<string> result;
 	auto table_name = table.name.GetIdentifierName();
-	auto index_name = hnsw_index.name.GetIdentifierName();
 	result.insert("table", table_name);
-	result.insert("index", index_name);
+	result.insert("index", index_name.GetIdentifierName());
 	result.insert("limit", to_string(limit));
 	SetEstimatedCardinality(result, estimated_cardinality);
 	return result;
@@ -190,9 +196,9 @@ InsertionOrderPreservingMap<string> PhysicalHNSWIndexJoin::ParamsToString() cons
 
 class LogicalHNSWIndexJoin final : public LogicalExtensionOperator {
 public:
-	explicit LogicalHNSWIndexJoin(const TableIndex table_index_p, DuckTableEntry &table_p, HNSWIndex &hnsw_index_p,
-	                              const idx_t limit_p)
-	    : table_index(table_index_p), table(table_p), hnsw_index(hnsw_index_p), limit(limit_p) {
+	explicit LogicalHNSWIndexJoin(const TableIndex table_index_p, DuckTableEntry &table_p,
+	                              shared_ptr<IndexEntry> index_entry_p, const idx_t limit_p)
+	    : table_index(table_index_p), table(table_p), index_entry(std::move(index_entry_p)), limit(limit_p) {
 	}
 
 public:
@@ -208,7 +214,7 @@ public:
 	TableIndex table_index;
 
 	DuckTableEntry &table;
-	HNSWIndex &hnsw_index;
+	shared_ptr<IndexEntry> index_entry;
 	idx_t limit;
 
 	vector<column_t> inner_column_ids;
@@ -293,7 +299,7 @@ vector<ColumnBinding> LogicalHNSWIndexJoin::GetColumnBindings() {
 
 PhysicalOperator &LogicalHNSWIndexJoin::CreatePlan(ClientContext &context, PhysicalPlanGenerator &planner) {
 
-	auto &result = planner.Make<PhysicalHNSWIndexJoin>(types, estimated_cardinality, table, hnsw_index, limit);
+	auto &result = planner.Make<PhysicalHNSWIndexJoin>(types, estimated_cardinality, table, index_entry, limit);
 	auto &cast_result = result.Cast<PhysicalHNSWIndexJoin>();
 	cast_result.limit = limit;
 	cast_result.inner_column_ids = inner_column_ids;
@@ -524,23 +530,24 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 	auto &duck_table = table.Cast<DuckTableEntry>();
 	auto &table_info = *table.GetStorage().GetDataTableInfo();
 
-	HNSWIndex *index_ptr = nullptr;
+	shared_ptr<IndexEntry> found_entry;
 	vector<reference<Expression>> bindings;
 
 	table_info.BindIndexes(context, HNSWIndex::TYPE_NAME);
-	for (auto &index : table_info.GetIndexes().Indexes()) {
-		if (!index.IsBound() || HNSWIndex::TYPE_NAME != index.GetIndexType()) {
+	for (auto index_entry : table_info.GetIndexes().IndexEntries()) {
+		if (index_entry->GetBindState() != IndexBindState::BOUND ||
+		    HNSWIndex::TYPE_NAME != index_entry->GetIndexType()) {
 			continue;
 		}
-		auto &cast_index = index.Cast<HNSWIndex>();
+		auto guard = index_entry->GetReadHandle<HNSWIndex>();
 
 		// Reset the bindings
 		bindings.clear();
-		if (!cast_index.TryMatchDistanceFunction(distance_expr_ptr, bindings)) {
+		if (!guard->TryMatchDistanceFunction(distance_expr_ptr, bindings)) {
 			continue;
 		}
 		unique_ptr<Expression> bound_index_expr = nullptr;
-		if (!cast_index.TryBindIndexExpression(inner_get, bound_index_expr)) {
+		if (!guard->TryBindIndexExpression(inner_get, bound_index_expr)) {
 			continue;
 		}
 
@@ -568,10 +575,10 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 		}
 
 		// Save the pointer to the index
-		index_ptr = &cast_index;
+		found_entry = index_entry;
 		break;
 	}
-	if (!index_ptr) {
+	if (!found_entry) {
 		return false;
 	}
 
@@ -595,7 +602,7 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 	// Now create the HNSWIndexJoin operator
 	//------------------------------------------------------------------------------
 
-	auto index_join = make_uniq<LogicalHNSWIndexJoin>(binder.GenerateTableIndex(), duck_table, *index_ptr, k_value);
+	auto index_join = make_uniq<LogicalHNSWIndexJoin>(binder.GenerateTableIndex(), duck_table, found_entry, k_value);
 	for (auto &column_id : inner_get.GetColumnIds()) {
 		index_join->inner_column_ids.emplace_back(column_id.GetPrimaryIndex());
 	}
@@ -675,7 +682,8 @@ bool HNSWIndexJoinOptimizer::TryOptimize(Binder &binder, ClientContext &context,
 		// Special case: the window row number expression. Forward this to the index join
 		else if (ref.Binding().table_index == window.window_index) {
 			// The special "row_number" expression is always the last column of the index_join itself
-			ColumnBinding index_row_number_binding(index_join->table_index, ProjectionIndex(index_join->inner_column_ids.size()));
+			ColumnBinding index_row_number_binding(index_join->table_index,
+			                                       ProjectionIndex(index_join->inner_column_ids.size()));
 			expr = make_uniq<BoundColumnRefExpression>(LogicalType::BIGINT, index_row_number_binding);
 		}
 	}
@@ -723,8 +731,7 @@ struct ArgMinOrigin {
 } // namespace
 
 bool HNSWIndexJoinOptimizer::TryOptimizeArgMin(Binder &binder, ClientContext &context,
-                                               unique_ptr<LogicalOperator> &root,
-                                               unique_ptr<LogicalOperator> &plan) {
+                                               unique_ptr<LogicalOperator> &root, unique_ptr<LogicalOperator> &plan) {
 	//------------------------------------------------------------------------------
 	// Match the DuckDB >= 1.5 plan produced by TopNWindowElimination:
 	//
@@ -815,13 +822,11 @@ bool HNSWIndexJoinOptimizer::TryOptimizeArgMin(Binder &binder, ClientContext &co
 	auto &order_ref = agg_expr.GetChildren()[1]->Cast<BoundColumnRefExpression>();
 
 	// inner_proj -> cross_product -> {delim_get, get}
-	if (aggregate.children.size() != 1 ||
-	    aggregate.children[0]->type != LogicalOperatorType::LOGICAL_PROJECTION) {
+	if (aggregate.children.size() != 1 || aggregate.children[0]->type != LogicalOperatorType::LOGICAL_PROJECTION) {
 		return false;
 	}
 	auto &inner_proj = aggregate.children[0]->Cast<LogicalProjection>();
-	if (inner_proj.children.size() != 1 ||
-	    inner_proj.children[0]->type != LogicalOperatorType::LOGICAL_CROSS_PRODUCT) {
+	if (inner_proj.children.size() != 1 || inner_proj.children[0]->type != LogicalOperatorType::LOGICAL_CROSS_PRODUCT) {
 		return false;
 	}
 	auto &cross_product = inner_proj.children[0]->Cast<LogicalCrossProduct>();
@@ -870,21 +875,22 @@ bool HNSWIndexJoinOptimizer::TryOptimizeArgMin(Binder &binder, ClientContext &co
 	auto &duck_table = table.Cast<DuckTableEntry>();
 	auto &table_info = *table.GetStorage().GetDataTableInfo();
 
-	HNSWIndex *index_ptr = nullptr;
+	shared_ptr<IndexEntry> found_entry;
 	vector<reference<Expression>> bindings;
 
 	table_info.BindIndexes(context, HNSWIndex::TYPE_NAME);
-	for (auto &index : table_info.GetIndexes().Indexes()) {
-		if (!index.IsBound() || HNSWIndex::TYPE_NAME != index.GetIndexType()) {
+	for (auto index_entry : table_info.GetIndexes().IndexEntries()) {
+		if (index_entry->GetBindState() != IndexBindState::BOUND ||
+		    HNSWIndex::TYPE_NAME != index_entry->GetIndexType()) {
 			continue;
 		}
-		auto &cast_index = index.Cast<HNSWIndex>();
+		auto guard = index_entry->GetReadHandle<HNSWIndex>();
 		bindings.clear();
-		if (!cast_index.TryMatchDistanceFunction(distance_expr_ptr, bindings)) {
+		if (!guard->TryMatchDistanceFunction(distance_expr_ptr, bindings)) {
 			continue;
 		}
 		unique_ptr<Expression> bound_index_expr = nullptr;
-		if (!cast_index.TryBindIndexExpression(inner_get, bound_index_expr)) {
+		if (!guard->TryBindIndexExpression(inner_get, bound_index_expr)) {
 			continue;
 		}
 		ExpressionIterator::EnumerateExpression(bound_index_expr, [&](Expression &child) {
@@ -904,10 +910,10 @@ bool HNSWIndexJoinOptimizer::TryOptimizeArgMin(Binder &binder, ClientContext &co
 				return false;
 			}
 		}
-		index_ptr = &cast_index;
+		found_entry = index_entry;
 		break;
 	}
-	if (!index_ptr) {
+	if (!found_entry) {
 		return false;
 	}
 	if (bindings[1].get().GetExpressionType() != ExpressionType::BOUND_COLUMN_REF) {
@@ -1039,7 +1045,7 @@ bool HNSWIndexJoinOptimizer::TryOptimizeArgMin(Binder &binder, ClientContext &co
 	//------------------------------------------------------------------------------
 	// Build the HNSW index join (identical shape to the window-plan matcher).
 	//------------------------------------------------------------------------------
-	auto index_join = make_uniq<LogicalHNSWIndexJoin>(binder.GenerateTableIndex(), duck_table, *index_ptr, k_value);
+	auto index_join = make_uniq<LogicalHNSWIndexJoin>(binder.GenerateTableIndex(), duck_table, found_entry, k_value);
 	for (auto &column_id : inner_get.GetColumnIds()) {
 		index_join->inner_column_ids.emplace_back(column_id.GetPrimaryIndex());
 	}
@@ -1076,8 +1082,7 @@ bool HNSWIndexJoinOptimizer::TryOptimizeArgMin(Binder &binder, ClientContext &co
 			// references the delim_get / inner_get and is remapped below.
 			projection_expressions.push_back(distance_expr_ptr.Copy());
 		} else {
-			projection_expressions.push_back(
-			    make_uniq<BoundColumnRefExpression>(delim_types[i], origins[i].binding));
+			projection_expressions.push_back(make_uniq<BoundColumnRefExpression>(delim_types[i], origins[i].binding));
 		}
 		replacer.replacement_bindings.emplace_back(delim_bindings[i],
 		                                           ColumnBinding(projection_table_index, new_binding_idx++));
@@ -1185,13 +1190,11 @@ bool HNSWIndexJoinOptimizer::TryOptimizeArgMinCte(Binder &binder, ClientContext 
 	auto &order_ref = agg_expr.GetChildren()[1]->Cast<BoundColumnRefExpression>();
 
 	// inner_proj -> cross_product -> {get (seq_scan), corr_source}
-	if (aggregate.children.size() != 1 ||
-	    aggregate.children[0]->type != LogicalOperatorType::LOGICAL_PROJECTION) {
+	if (aggregate.children.size() != 1 || aggregate.children[0]->type != LogicalOperatorType::LOGICAL_PROJECTION) {
 		return false;
 	}
 	auto &inner_proj = aggregate.children[0]->Cast<LogicalProjection>();
-	if (inner_proj.children.size() != 1 ||
-	    inner_proj.children[0]->type != LogicalOperatorType::LOGICAL_CROSS_PRODUCT) {
+	if (inner_proj.children.size() != 1 || inner_proj.children[0]->type != LogicalOperatorType::LOGICAL_CROSS_PRODUCT) {
 		return false;
 	}
 	auto &cross_product = inner_proj.children[0]->Cast<LogicalCrossProduct>();
@@ -1202,8 +1205,7 @@ bool HNSWIndexJoinOptimizer::TryOptimizeArgMinCte(Binder &binder, ClientContext 
 	auto &cp_rhs = cross_product.children[1];
 	unique_ptr<LogicalOperator> *corr_source_ptr = nullptr;
 	unique_ptr<LogicalOperator> *inner_get_ptr = nullptr;
-	if (cp_lhs->type == LogicalOperatorType::LOGICAL_GET &&
-	    cp_lhs->Cast<LogicalGet>().function.name == "seq_scan") {
+	if (cp_lhs->type == LogicalOperatorType::LOGICAL_GET && cp_lhs->Cast<LogicalGet>().function.name == "seq_scan") {
 		inner_get_ptr = &cp_lhs;
 		corr_source_ptr = &cp_rhs;
 	} else if (cp_rhs->type == LogicalOperatorType::LOGICAL_GET &&
@@ -1258,21 +1260,22 @@ bool HNSWIndexJoinOptimizer::TryOptimizeArgMinCte(Binder &binder, ClientContext 
 	auto &duck_table = table.Cast<DuckTableEntry>();
 	auto &table_info = *table.GetStorage().GetDataTableInfo();
 
-	HNSWIndex *index_ptr = nullptr;
+	shared_ptr<IndexEntry> found_entry;
 	vector<reference<Expression>> bindings;
 
 	table_info.BindIndexes(context, HNSWIndex::TYPE_NAME);
-	for (auto &index : table_info.GetIndexes().Indexes()) {
-		if (!index.IsBound() || HNSWIndex::TYPE_NAME != index.GetIndexType()) {
+	for (auto index_entry : table_info.GetIndexes().IndexEntries()) {
+		if (index_entry->GetBindState() != IndexBindState::BOUND ||
+		    HNSWIndex::TYPE_NAME != index_entry->GetIndexType()) {
 			continue;
 		}
-		auto &cast_index = index.Cast<HNSWIndex>();
+		auto guard = index_entry->GetReadHandle<HNSWIndex>();
 		bindings.clear();
-		if (!cast_index.TryMatchDistanceFunction(distance_expr_ptr, bindings)) {
+		if (!guard->TryMatchDistanceFunction(distance_expr_ptr, bindings)) {
 			continue;
 		}
 		unique_ptr<Expression> bound_index_expr = nullptr;
-		if (!cast_index.TryBindIndexExpression(inner_get, bound_index_expr)) {
+		if (!guard->TryBindIndexExpression(inner_get, bound_index_expr)) {
 			continue;
 		}
 		auto &lhs_dist_expr = bindings[1];
@@ -1284,10 +1287,10 @@ bool HNSWIndexJoinOptimizer::TryOptimizeArgMinCte(Binder &binder, ClientContext 
 				return false;
 			}
 		}
-		index_ptr = &cast_index;
+		found_entry = index_entry;
 		break;
 	}
-	if (!index_ptr) {
+	if (!found_entry) {
 		return false;
 	}
 	if (bindings[1].get().GetExpressionType() != ExpressionType::BOUND_COLUMN_REF) {
@@ -1419,7 +1422,7 @@ bool HNSWIndexJoinOptimizer::TryOptimizeArgMinCte(Binder &binder, ClientContext 
 	//------------------------------------------------------------------------------
 	// Build the HNSW index join, child = corr_source (correlated keys).
 	//------------------------------------------------------------------------------
-	auto index_join = make_uniq<LogicalHNSWIndexJoin>(binder.GenerateTableIndex(), duck_table, *index_ptr, k_value);
+	auto index_join = make_uniq<LogicalHNSWIndexJoin>(binder.GenerateTableIndex(), duck_table, found_entry, k_value);
 	for (auto &column_id : inner_get.GetColumnIds()) {
 		index_join->inner_column_ids.emplace_back(column_id.GetPrimaryIndex());
 	}
@@ -1456,8 +1459,7 @@ bool HNSWIndexJoinOptimizer::TryOptimizeArgMinCte(Binder &binder, ClientContext 
 		} else {
 			// OUTER/DELIM origins reference corr_source columns, which pass through the
 			// index join unchanged; INNER origins are remapped to the index join below.
-			projection_expressions.push_back(
-			    make_uniq<BoundColumnRefExpression>(output_types[i], origins[i].binding));
+			projection_expressions.push_back(make_uniq<BoundColumnRefExpression>(output_types[i], origins[i].binding));
 		}
 		replacer.replacement_bindings.emplace_back(output_bindings[i],
 		                                           ColumnBinding(projection_table_index, new_binding_idx++));

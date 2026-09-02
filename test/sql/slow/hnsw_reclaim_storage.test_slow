@@ -3,6 +3,8 @@
 
 require vss
 
+require notmusl
+
 load {TEST_DIR}/hnsw_reclaim_space.db
 
 statement ok

@@ -7,6 +7,9 @@ require vss
 load {TEST_DIR}/temp_index_hnsw_crud_storage.db
 
 statement ok
+SET profiling_renderer_settings = MAP {'operator_casing': 'upper'};
+
+statement ok
 SET hnsw_enable_experimental_persistence = true;
 
 statement ok
@@ -34,6 +37,9 @@ SELECT * FROM t1;
 
 # Restart the database
 restart
+
+statement ok
+SET profiling_renderer_settings = MAP {'operator_casing': 'upper'};
 
 # Step 2: Check the index
 query II

@@ -1,16 +1,19 @@
 # name: test/sql/hnsw/hnsw_lateral_join_plan.test
-# description: Regression test for issue #80. A batch (LATERAL) similarity search
-#              of the form `ORDER BY array_distance(...) LIMIT k` must be planned
-#              as HNSW_INDEX_JOIN. DuckDB 1.5 rewrites this pattern into an
-#              arg_min_nulls_last top-k aggregate (TopNWindowElimination), so the
-#              HNSW optimizer must recognise that plan shape, not just the older
-#              window/row_number shape. DuckDB's later `delim_join_as_cte` switch
-#              materialises the dependent join as a CTE, moving the arg_min subtree
-#              under an INNER comparison-join fed by a CTE_SCAN; the optimizer must
-#              match that shape too. Both settings are asserted below.
+# description: Regression test for issue #80's lateral HNSW index join planning.
 # group: [hnsw]
 
+# A batch (LATERAL) similarity search of the form `ORDER BY array_distance(...) LIMIT k`
+# must be planned as HNSW_INDEX_JOIN. DuckDB 1.5 rewrites this pattern into an
+# arg_min_nulls_last top-k aggregate (TopNWindowElimination), so the HNSW optimizer must
+# recognise that plan shape, not just the older window/row_number shape. DuckDB's later
+# `delim_join_as_cte` switch materialises the dependent join as a CTE, moving the arg_min
+# subtree under an INNER comparison-join fed by a CTE_SCAN; the optimizer must match that
+# shape too. Both settings are asserted below.
+
 require vss
+
+statement ok
+SET profiling_renderer_settings = MAP {'operator_casing': 'upper'};
 
 statement ok
 CREATE TABLE a (a_vec FLOAT[3], a_id INT);

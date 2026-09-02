@@ -149,9 +149,10 @@ public:
 //------------------------------------------------------------------------------
 
 // Constructor
-HNSWIndex::HNSWIndex(const Identifier &name, IndexConstraintType index_constraint_type, const vector<column_t> &column_ids,
-                     TableIOManager &table_io_manager, const vector<unique_ptr<Expression>> &unbound_expressions,
-                     AttachedDatabase &db, const case_insensitive_map_t<Value> &options, const IndexStorageInfo &info,
+HNSWIndex::HNSWIndex(const Identifier &name, IndexConstraintType index_constraint_type,
+                     const vector<column_t> &column_ids, TableIOManager &table_io_manager,
+                     const vector<unique_ptr<Expression>> &unbound_expressions, AttachedDatabase &db,
+                     const case_insensitive_map_t<Value> &options, const IndexStorageInfo &info,
                      idx_t estimated_cardinality)
     : BoundIndex(name, TYPE_NAME, index_constraint_type, column_ids, table_io_manager, unbound_expressions, db) {
 
@@ -290,7 +291,7 @@ const unordered_map<uint8_t, unum::usearch::scalar_kind_t> HNSWIndex::SCALAR_KIN
     */
 };
 
-unique_ptr<HNSWIndexStats> HNSWIndex::GetStats() {
+unique_ptr<HNSWIndexStats> HNSWIndex::GetStats() const {
 	auto lock = rwlock.GetExclusiveLock();
 	auto result = make_uniq<HNSWIndexStats>();
 
@@ -313,7 +314,7 @@ struct HNSWIndexScanState : public IndexScanState {
 	unique_array<row_t> row_ids = nullptr;
 };
 
-unique_ptr<IndexScanState> HNSWIndex::InitializeScan(float *query_vector, idx_t limit, ClientContext &context) {
+unique_ptr<IndexScanState> HNSWIndex::InitializeScan(float *query_vector, idx_t limit, ClientContext &context) const {
 	auto state = make_uniq<HNSWIndexScanState>();
 
 	// Try to get the ef_search parameter from the database or use the default value
@@ -366,7 +367,7 @@ struct MultiScanState final : IndexScanState {
 	}
 };
 
-unique_ptr<IndexScanState> HNSWIndex::InitializeMultiScan(ClientContext &context) {
+unique_ptr<IndexScanState> HNSWIndex::InitializeMultiScan(ClientContext &context) const {
 	// Try to get the ef_search parameter from the database or use the default value
 	auto ef_search = index.expansion_search();
 
@@ -383,7 +384,7 @@ unique_ptr<IndexScanState> HNSWIndex::InitializeMultiScan(ClientContext &context
 	return make_uniq<MultiScanState>(ef_search);
 }
 
-idx_t HNSWIndex::ExecuteMultiScan(IndexScanState &state_p, float *query_vector, idx_t limit) {
+idx_t HNSWIndex::ExecuteMultiScan(IndexScanState &state_p, float *query_vector, idx_t limit) const {
 	auto &state = state_p.Cast<MultiScanState>();
 
 	auto search_result = [&]() {
@@ -398,13 +399,13 @@ idx_t HNSWIndex::ExecuteMultiScan(IndexScanState &state_p, float *query_vector, 
 	return search_result.size();
 }
 
-const Vector &HNSWIndex::GetMultiScanResult(IndexScanState &state) {
+const Vector &HNSWIndex::GetMultiScanResult(IndexScanState &state) const {
 	auto &scan_state = state.Cast<MultiScanState>();
 	FlatVector::SetData(scan_state.vec, (data_ptr_t)scan_state.row_ids.data(), count_t(scan_state.row_ids.size()));
 	return scan_state.vec;
 }
 
-void HNSWIndex::ResetMultiScan(IndexScanState &state) {
+void HNSWIndex::ResetMultiScan(IndexScanState &state) const {
 	auto &scan_state = state.Cast<MultiScanState>();
 	scan_state.row_ids.clear();
 }
@@ -586,7 +587,7 @@ IndexStorageInfo HNSWIndex::SerializeToWAL(const case_insensitive_map_t<Value> &
 	return info;
 }
 
-idx_t HNSWIndex::GetInMemorySize(IndexLock &state) {
+idx_t HNSWIndex::GetInMemorySize(IndexLock &state) const {
 	// TODO: This is not correct: its a lower bound, but it's a start
 	return index.memory_usage();
 }
@@ -613,7 +614,8 @@ void HNSWIndex::VerifyAllocations(IndexLock &state) {
 //------------------------------------------------------------------------------
 // Can rewrite index expression?
 //------------------------------------------------------------------------------
-static void TryBindIndexExpressionInternal(Expression &expr, TableIndex table_idx, const vector<column_t> &index_columns,
+static void TryBindIndexExpressionInternal(Expression &expr, TableIndex table_idx,
+                                           const vector<column_t> &index_columns,
                                            const vector<ColumnIndex> &table_columns, bool &success, bool &found) {
 
 	if (expr.GetExpressionType() == ExpressionType::BOUND_COLUMN_REF) {
@@ -657,8 +659,7 @@ bool HNSWIndex::TryBindIndexExpression(LogicalGet &get, unique_ptr<Expression> &
 	return false;
 }
 
-bool HNSWIndex::TryMatchDistanceFunction(Expression &expr,
-                                         vector<reference<Expression>> &bindings) const {
+bool HNSWIndex::TryMatchDistanceFunction(Expression &expr, vector<reference<Expression>> &bindings) const {
 	return function_matcher->Match(expr, bindings);
 }
 
@@ -698,7 +699,6 @@ void HNSWIndex::VerifyBuffers(IndexLock &lock) {
 	// Verify the linked block allocator buffers
 	linked_block_allocator->VerifyBuffers();
 }
-
 
 //------------------------------------------------------------------------------
 // Register Index Type

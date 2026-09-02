@@ -64,7 +64,7 @@ unique_ptr<Expression> CosineDistanceRule::Apply(LogicalOperator &op, vector<ref
 		}
 
 		changes_made = true;
-		const auto &func = func_entry->functions.GetFunctionByArguments(context, arg_types);
+		const auto &func = *func_entry->functions.GetFunctionByArguments(context, arg_types);
 		return func.Bind(context, std::move(args));
 	}
 	return nullptr;

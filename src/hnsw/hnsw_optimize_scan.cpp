@@ -1,5 +1,6 @@
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
 #include "duckdb/optimizer/optimizer_extension.hpp"
+#include "duckdb/planner/column_binding_map.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression_iterator.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
@@ -101,22 +102,23 @@ public:
 		vector<reference<Expression>> bindings;
 
 		table_info.BindIndexes(context, HNSWIndex::TYPE_NAME);
-		for (auto &index : table_info.GetIndexes().Indexes()) {
-			if (!index.IsBound() || HNSWIndex::TYPE_NAME != index.GetIndexType()) {
+		for (auto index_entry : table_info.GetIndexes().IndexEntries()) {
+			if (index_entry->GetBindState() != IndexBindState::BOUND ||
+			    HNSWIndex::TYPE_NAME != index_entry->GetIndexType()) {
 				continue;
 			}
-			auto &cast_index = index.Cast<HNSWIndex>();
+			auto guard = index_entry->GetReadHandle<HNSWIndex>();
 
 			// Reset the bindings
 			bindings.clear();
 
 			// Check that the projection expression is a distance function that matches the index
-			if (!cast_index.TryMatchDistanceFunction(projection_expr, bindings)) {
+			if (!guard->TryMatchDistanceFunction(projection_expr, bindings)) {
 				continue;
 			}
 			// Check that the HNSW index actually indexes the expression
 			unique_ptr<Expression> index_expr;
-			if (!cast_index.TryBindIndexExpression(get, index_expr)) {
+			if (!guard->TryBindIndexExpression(get, index_expr)) {
 				continue;
 			}
 
@@ -135,7 +137,7 @@ public:
 				}
 			}
 
-			const auto vector_size = cast_index.GetVectorSize();
+			const auto vector_size = guard->GetVectorSize();
 			const auto &matched_vector = const_expr_ref.get().Cast<BoundConstantExpression>().GetValue();
 			auto query_vector = make_unsafe_uniq_array<float>(vector_size);
 			auto vector_elements = ArrayValue::GetChildren(matched_vector);
@@ -143,7 +145,8 @@ public:
 				query_vector[i] = vector_elements[i].GetValue<float>();
 			}
 
-			bind_data = make_uniq<HNSWIndexScanBindData>(duck_table, cast_index, top_n.limit, std::move(query_vector));
+			bind_data = make_uniq<HNSWIndexScanBindData>(duck_table, index_entry, guard->GetIndexName(), top_n.limit,
+			                                             std::move(query_vector));
 			break;
 		}
 
