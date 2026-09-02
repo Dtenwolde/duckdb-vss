@@ -10,6 +10,12 @@ TEST_FLAGS:=--stabilize-tests
 endif
 T ?= $(TEST_FLAGS) "test/*"
 
+# extension-ci-tools does not forward DuckDB's FORCE_DEBUG make variable.
+# Translate it to the CMake flag consumed by its release-style build targets.
+ifeq (${FORCE_DEBUG}, 1)
+EXT_RELEASE_FLAGS += -DFORCE_DEBUG=1
+endif
+
 # Include the Makefile from extension-ci-tools
 include extension-ci-tools/makefiles/duckdb_extension.Makefile
 
