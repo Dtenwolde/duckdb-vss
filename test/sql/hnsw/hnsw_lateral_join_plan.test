@@ -79,3 +79,31 @@ ORDER BY a_id, b_str;
 1	b
 2	a
 2	b
+
+# User-written payload expressions must also be copied exactly through the
+# arg_min/UNNEST rewrite, rather than being mistaken for the distance expression.
+query II
+EXPLAIN SELECT a_id, nearest.*
+FROM a, LATERAL (
+    SELECT b_str, CAST(b_vec[1] AS INTEGER) AS first_component, upper(b_str) AS upper_str
+    FROM b
+    ORDER BY array_distance(a.a_vec, b.b_vec)
+    LIMIT 2
+) nearest;
+----
+physical_plan	<REGEX>:.*HNSW_INDEX_JOIN.*
+
+query ITIT
+SELECT a_id, nearest.*
+FROM a, LATERAL (
+    SELECT b_str, CAST(b_vec[1] AS INTEGER) AS first_component, upper(b_str) AS upper_str
+    FROM b
+    ORDER BY array_distance(a.a_vec, b.b_vec)
+    LIMIT 2
+) nearest
+ORDER BY a_id, b_str;
+----
+1	a	1	A
+1	b	4	B
+2	a	1	A
+2	b	4	B
