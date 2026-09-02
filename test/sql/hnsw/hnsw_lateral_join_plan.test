@@ -59,3 +59,23 @@ query II
 EXPLAIN SELECT * FROM a, LATERAL (SELECT * FROM b ORDER BY array_distance(a.a_vec, b.b_vec) LIMIT 2);
 ----
 physical_plan	<REGEX>:.*HNSW_INDEX_JOIN.*
+
+# Exercise the CTE rewrite's projection as well as its plan shape. In particular,
+# LIMIT 2 must preserve the exact payload expressions produced by arg_min.
+query IT
+SELECT a_id, b_str
+FROM a, LATERAL (SELECT * FROM b ORDER BY array_distance(a.a_vec, b.b_vec) LIMIT 1)
+ORDER BY a_id, b_str;
+----
+1	a
+2	b
+
+query IT
+SELECT a_id, b_str
+FROM a, LATERAL (SELECT * FROM b ORDER BY array_distance(a.a_vec, b.b_vec) LIMIT 2)
+ORDER BY a_id, b_str;
+----
+1	a
+1	b
+2	a
+2	b
