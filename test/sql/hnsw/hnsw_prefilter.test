@@ -9,6 +9,14 @@ require noforcestorage
 statement ok
 SET profiling_renderer_settings = MAP {'operator_casing': 'upper'};
 
+query I
+SELECT current_setting('hnsw_enable_filter_pushdown');
+----
+false
+
+statement ok
+SET hnsw_enable_filter_pushdown = true;
+
 statement ok
 CREATE TABLE items (id INTEGER, category VARCHAR, vec FLOAT[3]);
 
@@ -102,8 +110,8 @@ SELECT id FROM items WHERE category = 'keep' ORDER BY array_distance(vec, [1, 0,
 6
 7
 
-# Pre-filtering can be disabled to avoid its O(n) filter scan. This restores
-# the previous post-filter behavior, where fewer than LIMIT rows can survive.
+# Disabling pre-filtering restores the default post-filter behavior, where
+# fewer than LIMIT rows can survive.
 statement ok
 SET hnsw_enable_filter_pushdown = false;
 

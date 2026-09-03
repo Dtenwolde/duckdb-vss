@@ -232,7 +232,7 @@ static InsertionOrderPreservingMap<string> HNSWIndexScanToString(TableFunctionTo
 bool HNSWIndexScanFunction::FilterPushdownEnabled(ClientContext &context) {
 	Value enable_filter_pushdown;
 	if (!context.TryGetCurrentSetting("hnsw_enable_filter_pushdown", enable_filter_pushdown)) {
-		return true;
+		return false;
 	}
 	return enable_filter_pushdown.GetValue<bool>();
 }
