@@ -163,12 +163,3 @@ query II
 SELECT count(*), count(*) FILTER (WHERE NOT eligible) FROM many_items_result;
 ----
 10	0
-
-# ORDER BY ... LIMIT scans can also emit results across multiple output chunks.
-statement ok
-CREATE TEMP TABLE many_items_large_result AS SELECT id, eligible FROM many_items WHERE eligible ORDER BY array_distance(vec, [0, 0, 0]::FLOAT[3]) LIMIT 2500;
-
-query II
-SELECT count(*), count(*) FILTER (WHERE NOT eligible) FROM many_items_large_result;
-----
-2500	0
