@@ -232,7 +232,7 @@ static InsertionOrderPreservingMap<string> HNSWIndexScanToString(TableFunctionTo
 bool HNSWIndexScanFunction::PrefilterEnabled(ClientContext &context) {
 	Value prefilter;
 	if (!context.TryGetCurrentSetting("hnsw_prefilter", prefilter)) {
-		return false;
+		return true;
 	}
 	return prefilter.GetValue<bool>();
 }

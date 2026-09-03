@@ -750,7 +750,7 @@ void HNSWModule::RegisterIndex(DatabaseInstance &db) {
 	                             LogicalType::BIGINT);
 	db.config.AddExtensionOption("hnsw_prefilter",
 	                             "experimental: apply static table filters before searching HNSW indexes",
-	                             LogicalType::BOOLEAN, Value::BOOLEAN(false));
+	                             LogicalType::BOOLEAN, Value::BOOLEAN(true));
 
 	// Register the index type
 	db.config.GetIndexTypes().RegisterIndexType(index_type);
