@@ -10,12 +10,12 @@ statement ok
 SET profiling_renderer_settings = MAP {'operator_casing': 'upper'};
 
 query I
-SELECT current_setting('hnsw_enable_filter_pushdown');
+SELECT current_setting('hnsw_prefilter');
 ----
 false
 
 statement ok
-SET hnsw_enable_filter_pushdown = true;
+SET hnsw_prefilter = true;
 
 statement ok
 CREATE TABLE items (id INTEGER, category VARCHAR, vec FLOAT[3]);
@@ -113,7 +113,7 @@ SELECT id FROM items WHERE category = 'keep' ORDER BY array_distance(vec, [1, 0,
 # Disabling pre-filtering restores the default post-filter behavior, where
 # fewer than LIMIT rows can survive.
 statement ok
-SET hnsw_enable_filter_pushdown = false;
+SET hnsw_prefilter = false;
 
 query I
 SELECT id FROM items WHERE category = 'keep' ORDER BY array_distance(vec, [1, 0, 0]::FLOAT[3]) LIMIT 3;
@@ -121,7 +121,7 @@ SELECT id FROM items WHERE category = 'keep' ORDER BY array_distance(vec, [1, 0,
 0
 
 statement ok
-SET hnsw_enable_filter_pushdown = true;
+SET hnsw_prefilter = true;
 
 # Deleted rows are absent from the transaction-visible pre-filter set.
 statement ok

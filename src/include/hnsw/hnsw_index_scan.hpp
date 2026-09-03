@@ -14,9 +14,9 @@ namespace duckdb {
 struct HNSWIndexScanBindData final : public TableScanBindData {
 	explicit HNSWIndexScanBindData(TableCatalogEntry &table, shared_ptr<IndexEntry> index_entry,
 	                               Identifier index_name_p, idx_t limit, unsafe_unique_array<float> query,
-	                               bool filter_pushdown_p)
+	                               bool prefilter_p)
 	    : TableScanBindData(table), index_name(std::move(index_name_p)), index_entry(std::move(index_entry)),
-	      limit(limit), query(std::move(query)), filter_pushdown(filter_pushdown_p) {
+	      limit(limit), query(std::move(query)), prefilter(prefilter_p) {
 	}
 
 	//! The index name used for display purposes
@@ -32,7 +32,7 @@ struct HNSWIndexScanBindData final : public TableScanBindData {
 	unsafe_unique_array<float> query;
 
 	//! Whether static table filters should be evaluated before the HNSW search
-	bool filter_pushdown;
+	bool prefilter;
 
 public:
 	bool Equals(const FunctionData &other_p) const override {
@@ -43,7 +43,7 @@ public:
 
 struct HNSWIndexScanFunction {
 	static TableFunction GetFunction();
-	static bool FilterPushdownEnabled(ClientContext &context);
+	static bool PrefilterEnabled(ClientContext &context);
 };
 
 } // namespace duckdb

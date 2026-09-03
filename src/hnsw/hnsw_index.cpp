@@ -748,7 +748,7 @@ void HNSWModule::RegisterIndex(DatabaseInstance &db) {
 	db.config.AddExtensionOption("hnsw_ef_search",
 	                             "experimental: override the ef_search parameter when scanning HNSW indexes",
 	                             LogicalType::BIGINT);
-	db.config.AddExtensionOption("hnsw_enable_filter_pushdown",
+	db.config.AddExtensionOption("hnsw_prefilter",
 	                             "experimental: apply static table filters before searching HNSW indexes",
 	                             LogicalType::BOOLEAN, Value::BOOLEAN(false));
 

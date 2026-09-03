@@ -117,7 +117,7 @@ static unique_ptr<GlobalTableFunctionState> HNSWIndexScanInitGlobal(ClientContex
 	// rows instead of filtering an unqualified top-k afterward.
 	HNSWFilterBitmap filter;
 	optional_ptr<const HNSWFilterBitmap> filter_ptr;
-	if (bind_data.filter_pushdown && input.filters &&
+	if (bind_data.prefilter && input.filters &&
 	    (input.filters->HasFilters() || input.filters->HasMultiColumnFilters())) {
 		BuildFilterBitmap(context, input, bind_data, filter);
 		filter_ptr = &filter;
@@ -229,12 +229,12 @@ static InsertionOrderPreservingMap<string> HNSWIndexScanToString(TableFunctionTo
 //-------------------------------------------------------------------------
 // Get Function
 //-------------------------------------------------------------------------
-bool HNSWIndexScanFunction::FilterPushdownEnabled(ClientContext &context) {
-	Value enable_filter_pushdown;
-	if (!context.TryGetCurrentSetting("hnsw_enable_filter_pushdown", enable_filter_pushdown)) {
+bool HNSWIndexScanFunction::PrefilterEnabled(ClientContext &context) {
+	Value prefilter;
+	if (!context.TryGetCurrentSetting("hnsw_prefilter", prefilter)) {
 		return false;
 	}
-	return enable_filter_pushdown.GetValue<bool>();
+	return prefilter.GetValue<bool>();
 }
 
 TableFunction HNSWIndexScanFunction::GetFunction() {

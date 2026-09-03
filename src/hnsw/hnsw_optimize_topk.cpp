@@ -124,7 +124,7 @@ public:
 
 		unique_ptr<HNSWIndexScanBindData> bind_data = nullptr;
 		vector<reference<Expression>> bindings;
-		const auto filter_pushdown = HNSWIndexScanFunction::FilterPushdownEnabled(context);
+		const auto prefilter = HNSWIndexScanFunction::PrefilterEnabled(context);
 
 		table_info.BindIndexes(context, HNSWIndex::TYPE_NAME);
 		for (auto index_entry : table_info.GetIndexes().IndexEntries()) {
@@ -175,7 +175,7 @@ public:
 				continue;
 			}
 			bind_data = make_uniq<HNSWIndexScanBindData>(duck_table, index_entry, guard->GetIndexName(), k_limit,
-			                                             std::move(query_vector), filter_pushdown);
+			                                             std::move(query_vector), prefilter);
 			break;
 		}
 
@@ -196,7 +196,7 @@ public:
 		    CreateListOrderByExpr(context, col_expr->Copy(), dist_expr.Copy(),
 		                          agg_func_expr.GetFilter() ? agg_func_expr.GetFilter()->Copy() : nullptr);
 
-		if (!filter_pushdown && get.table_filters.HasFilters()) {
+		if (!prefilter && get.table_filters.HasFilters()) {
 			// Restore the post-filter plan when pre-filtering is explicitly disabled.
 			get.projection_ids.clear();
 			get.types.clear();
