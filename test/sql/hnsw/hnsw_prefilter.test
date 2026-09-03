@@ -131,3 +131,36 @@ SELECT id FROM items WHERE category = 'keep' ORDER BY array_distance(vec, [1, 0,
 
 statement ok
 COMMIT;
+
+# Filter cardinality is independent of STANDARD_VECTOR_SIZE. The filtered scan
+# accumulates qualifying row IDs across every input chunk before HNSW search.
+statement ok
+CREATE TABLE many_items (id INTEGER, eligible BOOLEAN, vec FLOAT[3]);
+
+statement ok
+INSERT INTO many_items SELECT i, i >= 2500, [i, 0, 0]::FLOAT[3] FROM range(5000) t(i);
+
+statement ok
+CREATE INDEX many_items_vec_idx ON many_items USING HNSW (vec);
+
+query II
+EXPLAIN SELECT id FROM many_items WHERE eligible ORDER BY array_distance(vec, [0, 0, 0]::FLOAT[3]) LIMIT 10;
+----
+physical_plan	<REGEX>:.*HNSW_INDEX_SCAN.*
+
+statement ok
+CREATE TEMP TABLE many_items_result AS SELECT id, eligible FROM many_items WHERE eligible ORDER BY array_distance(vec, [0, 0, 0]::FLOAT[3]) LIMIT 10;
+
+query II
+SELECT count(*), count(*) FILTER (WHERE NOT eligible) FROM many_items_result;
+----
+10	0
+
+# ORDER BY ... LIMIT scans can also emit results across multiple output chunks.
+statement ok
+CREATE TEMP TABLE many_items_large_result AS SELECT id, eligible FROM many_items WHERE eligible ORDER BY array_distance(vec, [0, 0, 0]::FLOAT[3]) LIMIT 2500;
+
+query II
+SELECT count(*), count(*) FILTER (WHERE NOT eligible) FROM many_items_large_result;
+----
+2500	0
