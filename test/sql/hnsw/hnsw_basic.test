@@ -7,6 +7,9 @@ require vss
 load {TEST_DIR}/temp_index_hnsw_storage.db
 
 statement ok
+SET profiling_renderer_settings = MAP {'operator_casing': 'upper'};
+
+statement ok
 SET hnsw_enable_experimental_persistence = true;
 
 statement ok
@@ -39,6 +42,9 @@ CHECKPOINT;
 
 # Restart
 restart
+
+statement ok
+SET profiling_renderer_settings = MAP {'operator_casing': 'upper'};
 
 # Make sure we get the index scan plan again
 query II

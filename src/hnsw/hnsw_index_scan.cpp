@@ -64,8 +64,10 @@ static unique_ptr<GlobalTableFunctionState> HNSWIndexScanInitGlobal(ClientContex
 	local_storage.InitializeScan(bind_data.table.GetStorage(), result->local_storage_state.local_state, input.filters);
 
 	// Initialize the scan state for the index
-	result->index_state =
-	    bind_data.index.Cast<HNSWIndex>().InitializeScan(bind_data.query.get(), bind_data.limit, context);
+	{
+		auto index = bind_data.index_entry->GetReadHandle<HNSWIndex>();
+		result->index_state = index->InitializeScan(bind_data.query.get(), bind_data.limit, context);
+	}
 
 	if (!input.CanRemoveFilterColumns()) {
 		return std::move(result);
@@ -99,7 +101,7 @@ static void HNSWIndexScanExecute(ClientContext &context, TableFunctionInput &dat
 	auto &transaction = DuckTransaction::Get(context, bind_data.table.catalog);
 
 	// Scan the index for row id's
-	auto row_count = bind_data.index.Cast<HNSWIndex>().Scan(*state.index_state, state.row_ids);
+	auto row_count = HNSWIndex::Scan(*state.index_state, state.row_ids);
 	if (row_count == 0) {
 		// Short-circuit if the index had no more rows
 		output.SetCardinality(0);
@@ -160,7 +162,7 @@ static InsertionOrderPreservingMap<string> HNSWIndexScanToString(TableFunctionTo
 	InsertionOrderPreservingMap<string> result;
 	auto &bind_data = input.bind_data->Cast<HNSWIndexScanBindData>();
 	result["Table"] = bind_data.table.name.GetIdentifierName();
-	result["HNSW Index"] = bind_data.index.GetIndexName().GetIdentifierName();
+	result["HNSW Index"] = bind_data.index_name.GetIdentifierName();
 	return result;
 }
 
